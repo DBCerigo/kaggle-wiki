@@ -1,14 +1,9 @@
 # exclude contents of data dir
 data/*
 model/*
-shing/data/*
-shing/models/*
 # exception for .gitkeepdir file to keep data dir in repo...
 !model/.gitkeepdir
-!shing/models/.gitkeepdir
 !data/.gitkeepdir
-!shing/data/.gitkeepdir
-!data/dev_submission.csv
 
 # explude vim swp files
 *.swp
