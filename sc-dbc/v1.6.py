@@ -7,8 +7,6 @@
 # In[2]:
 
 
-import matplotlib.pyplot as plt
-plt.style.use('ggplot')
 import os
 import pandas as pd
 import numpy as np 
@@ -56,7 +54,7 @@ ds = pd.read_feather(PROPHET_PATH+'ds.f')
 # should break if the dir already exists - avoids accidental overwriting
 VERSION = 'v1.6/'
 val_lims = (0,-60)
-os.makedirs(PROPHET_PATH+VERSION)
+#os.makedirs(PROPHET_PATH+VERSION)
 
 
 # In[6]:
@@ -124,7 +122,7 @@ def wrapper(pages):
 # In[12]:
 
 
-total_proc = mp.cpu_count()>>1
+total_proc = mp.cpu_count()
 
 
 # In[13]:
