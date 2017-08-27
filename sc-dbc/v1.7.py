@@ -1,5 +1,8 @@
-
 # coding: utf-8
+
+
+# NOTE: should be ran with `python3 vX.py 2>> some_log_file 1> /dev/null`, this capture the good stuff in the log
+# ...and dumps the shitty STAN stuff 
 
 # In[1]:
 
