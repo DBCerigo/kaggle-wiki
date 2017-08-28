@@ -40,20 +40,20 @@ pagedf = pd.read_feather(PROPHET_PATH+'pagedf.f')
 ds = pd.read_feather(PROPHET_PATH+'ds.f')
 
 
-# ## Version 1.8
+# ## Version 1.7
 # Should set version directory name in next cell. Should describe version specifics (outliers, holidays, validation period)
 
 # * Val indexing on -60
 # * No outlier fixing
 # * Linear growth
 # * Truncating predictions at 0
-# * Fill first 0s with 0.0001
 # * Fill first NaNs with 0.0001
 # * Fill ALL other NaNs to 0
 
 # ### Remarks
 # * ?
 
+# In[5]:
 
 
 # should break if the dir already exists - avoids accidental overwriting
@@ -64,7 +64,7 @@ val_lims = (0,-60)
 
 # In[6]:
 
-pagedf.loc[:0,pagedf.loc[0]==0] = 0.001
+
 pagedf.loc[:0] = pagedf.loc[:0].fillna(0.001)
 pagedf = pagedf.fillna(0); pagedf.head()
 
@@ -125,11 +125,7 @@ def wrapper(pages):
 # testing
 
 total_proc = mp.cpu_count()
-# NOTE: shuffle the cols to that any pages that still need models built get distributied evenly
-# NOTE: shuffling the index directly switches all the pages from their corresponding series... BAD
-cols = pagedf.columns.values.copy()
-np.random.shuffle(cols)
-col_split = np.array_split(cols, total_proc)
+col_split = np.array_split(pagedf.columns, total_proc)
 mp_pool = mp.Pool(total_proc)
 with utils.clock():
     val_results = mp_pool.map(wrapper, col_split)
