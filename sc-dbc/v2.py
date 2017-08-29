@@ -97,7 +97,6 @@ def process_page(page):
         traindf = df.iloc[val_lims[0]:val_lims[1]]
         traindf['train'] = 1 # feather won't serialize bool so 1s and 0s...
         traindf.loc[traindf.y > traindf.y.quantile(.95), ['y']] = np.nan
-        m = Prophet(yearly_seasonality=True)
         try:
                 m = Prophet(yearly_seasonality=True)
                 m.fit(traindf)
@@ -121,9 +120,12 @@ def process_page(page):
     return (page, full_smape, val_smape)
 
 def wrapper(pages):
+    base_log_info = '[Process:{0}] '.format(mp.current_process().name)
     val_results = []
+    lg.info(base_log_info +'starting its pages loop')
     for page in tqdm(pages):
         val_results.append(process_page(page))
+    lg.info(base_log_info +'finished its pages loop')
     return val_results
 
 
@@ -136,6 +138,7 @@ col_split = np.array_split(cols, total_proc)
 mp_pool = mp.Pool(total_proc)
 with utils.clock():
     val_results = mp_pool.map(wrapper, col_split)
+    lg.info('Finished pool map')
 lg.info('Val results recieved - processes ended')
 val_results = [item for sublist in val_results for item in sublist]
 val_results = pd.DataFrame(val_results, columns=['page_index',VERSION[:-1]+'_full',VERSION[:-1]+'_val'])
