@@ -93,6 +93,8 @@ def process_page(page):
         lg.info(base_log_info +'COMPUTE loop')
         df = ds.join(pagedf[page])
         df.columns = ['ds','y']
+        if page == '93470':
+            df.loc[0,'y'] = 67
         # should also consider doing validation on the time period we are forecasting
         traindf = df.iloc[val_lims[0]:val_lims[1]]
         traindf['train'] = 1 # feather won't serialize bool so 1s and 0s...
