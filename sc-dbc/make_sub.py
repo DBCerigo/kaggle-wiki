@@ -31,12 +31,12 @@ lg.info('Make ds frame')
 ds = pd.DataFrame(pd.date_range('1/1/2017', '3/1/2017'), columns=['ds'])
 
 #testing
-page_index = page_index.loc[:100]
+#page_index = page_index.loc[:100]
 
 
 
 def process_page(index_page):
-    base_log_info = '[Process:{0}, on page:{1}] '.format(mp.current_process().name, page)
+    base_log_info = '[Process:{0}, on page:{1}] '.format(mp.current_process().name, index_page[0])
     lg.info(base_log_info)
     # use index_page[0] to load model
     lg.info(base_log_info+'Start load model')
