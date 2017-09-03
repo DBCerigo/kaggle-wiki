@@ -32,7 +32,9 @@ lg.info('Make ds frame')
 ds = pd.DataFrame(pd.date_range('1/1/2017', '3/1/2017'), columns=['ds'])
 
 #testing
-page_index = page_index.loc[:10]
+page_index = page_index.loc[:100]
+pageindexs = page_index.values
+lg.info(pageindexs)
 
 subf = open(PROPHET_PATH+'submissions/'+VERSION[:-1]+'.csv', 'w')
 subf.write('Id,Visits\n')
@@ -45,6 +47,7 @@ for row in tqdm(page_index.iterrows()):
         pkf.close()
     lg.info('Finished load model')
     # use model + ds to get prediction
+    # NOTE: this is the limiting step ~ 1s -> should make parallel 
     lg.info('Start model predict')
     tdf = m.predict(ds).loc[:,['ds','yhat']]
     lg.info('Finish model predict')
@@ -58,18 +61,17 @@ for row in tqdm(page_index.iterrows()):
     lg.info('Start del ds column')
     del tdf['ds']
     lg.info('Finish del ds column')
-    # NOTE: WARN: this takes ~5 seconds and is the chock
-    # Bad because we are every time searching for out page in the massive key list
-    # Solutions: filter on the Page name first? Make key df for each page first and then just read that little df and merge
-    # Go through the page numbers in order and only read the corresponding part of the csv
-    # Just stack the predictions up and then merge just once
-    lg.info(tdf)
     try:
         lg.info('Start append')
         df = df.append(tdf, ignore_index=True)
         lg.info('Finish append')
     except NameError:
         df = tdf
+# NOTE: WARN: this takes ~5 seconds and is the chock
+# Bad because we are every time searching for out page in the massive key list
+# Solutions: filter on the Page name first? Make key df for each page first and then just read that little df and merge
+# Go through the page numbers in order and only read the corresponding part of the csv
+# Just stack the predictions up and then merge just once
 lg.info('Start merg on Page')
 df = df.merge(keydf, on='Page', how='left').loc[:,['Id','yhat']]
 lg.info('Finish merg on Page')
