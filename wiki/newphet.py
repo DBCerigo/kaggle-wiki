@@ -1,6 +1,6 @@
 from matplotlib import pyplot as plt
 
-def prophet_plot(df, ax=None, uncertainty=True, plot_cap=True, plot_yhat_org=False, plot_y=True,
+def prophet_plot(df, ax=None, uncertainty=True, plot_cap=True, plot_y_org=True, plot_yhat_org=False, plot_y=True,
          xlabel='ds',
          ylabel='y_org'):
     """Plot the Prophet forecast.
@@ -24,7 +24,8 @@ def prophet_plot(df, ax=None, uncertainty=True, plot_cap=True, plot_yhat_org=Fal
         fig = ax.get_figure()
     df_train = df[df['train'] == 1]
     df_val = df[df['train'] == 0]
-    ax.plot(df_train['ds'].values, df_train['y_org'], 'k')
+    if plot_y_org:
+        ax.plot(df_train['ds'].values, df_train['y_org'], 'k')
     ax.plot(df_val['ds'].values, df_val['y_org'], 'r')
     ax.plot(df['ds'].values, df['yhat'], ls='-', c='#0072B2')
     if plot_y:
