@@ -55,18 +55,21 @@ for row in tqdm(page_index.iterrows()):
     lg.info('Start apply make page_date col')
     tdf['Page'] = tdf.ds.apply(lambda x: row[1][1]+'_'+str(x.date()))
     lg.info('Finish apply make page_date col')
+    lg.info('Start del ds column')
+    del tdf['ds']
+    lg.info('Finish del ds column')
     # NOTE: WARN: this takes ~5 seconds and is the chock
     # Bad because we are every time searching for out page in the massive key list
     # Solutions: filter on the Page name first? Make key df for each page first and then just read that little df and merge
     # Go through the page numbers in order and only read the corresponding part of the csv
     # Just stack the predictions up and then merge just once
     lg.info(tdf)
-    if df is None:
-        df = tdf
-    else:
+    try:
         lg.info('Start append')
         df = df.append(tdf, ignore_index=True)
         lg.info('Finish append')
+    except NameError:
+        df = tdf
 lg.info('Start merg on Page')
 df = df.merge(keydf, on='Page', how='left').loc[:,['Id','yhat']]
 lg.info('Finish merg on Page')
