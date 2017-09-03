@@ -32,7 +32,7 @@ lg.info('Make ds frame')
 ds = pd.DataFrame(pd.date_range('1/1/2017', '3/1/2017'), columns=['ds'])
 
 #testing
-#page_index = page_index.loc[:10]
+page_index = page_index.loc[:10]
 
 subf = open(PROPHET_PATH+'submissions/'+VERSION[:-1]+'.csv', 'w')
 subf.write('Id,Visits\n')
@@ -46,25 +46,33 @@ for row in tqdm(page_index.iterrows()):
     lg.info('Finished load model')
     # use model + ds to get prediction
     lg.info('Start model predict')
-    df = m.predict(ds).loc[:,['ds','yhat']]
+    tdf = m.predict(ds).loc[:,['ds','yhat']]
     lg.info('Finish model predict')
     lg.info('Start truncate to zero')
-    df.loc[df['yhat'] < 0,['yhat']] = 0.0
+    tdf.loc[tdf['yhat'] < 0,['yhat']] = 0.0
     lg.info('Finish truncate to zero')
     # use row[1][1] and apply to make key col
     lg.info('Start apply make page_date col')
-    df['Page'] = df.ds.apply(lambda x: row[1][1]+'_'+str(x.date()))
+    tdf['Page'] = tdf.ds.apply(lambda x: row[1][1]+'_'+str(x.date()))
     lg.info('Finish apply make page_date col')
-    lg.info('Start merg on Page')
     # NOTE: WARN: this takes ~5 seconds and is the chock
     # Bad because we are every time searching for out page in the massive key list
     # Solutions: filter on the Page name first? Make key df for each page first and then just read that little df and merge
     # Go through the page numbers in order and only read the corresponding part of the csv
-    df = df.merge(keydf, on='Page', how='left').loc[:,['Id','yhat']]
-    lg.info('Finish merg on Page')
-    lg.info('Start to_csv')
-    df.to_csv(subf,header=False, index=False)
-    lg.info('Finished to_csv')
-    # write it to csv
+    # Just stack the predictions up and then merge just once
+    lg.info(tdf)
+    if df is None:
+        df = tdf
+    else:
+        lg.info('Start append')
+        df = df.append(tdf, ignore_index=True)
+        lg.info('Finish append')
+lg.info('Start merg on Page')
+df = df.merge(keydf, on='Page', how='left').loc[:,['Id','yhat']]
+lg.info('Finish merg on Page')
+lg.info('Start to_csv')
+df.to_csv(subf,header=False, index=False)
+lg.info('Finished to_csv')
+# write it to csv
 subf.close()
 
