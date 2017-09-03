@@ -25,16 +25,8 @@ from wiki import utils
 import multiprocessing as mp
 from tqdm import tqdm
 
-
-# In[3]:
-
-
 PROPHET_PATH = '../data/prophet/'
 RESULTS_PATH = 'results/'
-
-
-# In[4]:
-
 
 pagedf = pd.read_feather(PROPHET_PATH+'pagedf.f')
 ds = pd.read_feather(PROPHET_PATH+'ds.f')
@@ -61,24 +53,13 @@ assert VERSION[-1] == '/'
 val_lims = (0,-60)
 #os.makedirs(PROPHET_PATH+VERSION)
 
-
-# In[6]:
-
 pagedf = pagedf.fillna(0)
-
 
 # # WARNING:
 # Turned off the chained assignment warning - when slicing dfs they can return copies sometimes instead,
 # which will mean your assignment wont be done on the actual base df.
 # Not sure why it's still compaining at me when I'm using .loc for assignations everywhere... shitty
-
-# In[8]:
-
-
 pd.options.mode.chained_assignment = None
-
-
-# In[9]:
 
 
 def process_page(page):
