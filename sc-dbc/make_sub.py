@@ -23,9 +23,8 @@ VERSION = 'v1.6f/'
 assert VERSION[-1] == '/'
 assert VERSION[-2] == 'f'
 
-lg.info('Load base dfs')
+lg.info('Start load page_index df')
 page_index = pd.read_feather(PROPHET_PATH+'page_index.f')
-keydf = pd.read_csv('../data/key_1.csv')
 
 # January, 1st, 2017 up until March 1st, 2017.
 lg.info('Make ds frame')
@@ -33,7 +32,9 @@ ds = pd.DataFrame(pd.date_range('1/1/2017', '3/1/2017'), columns=['ds'])
 
 #testing
 page_index = page_index.loc[:100]
-pageindexs = page_index.values
+# NOTE: bad name, actually [[index1,page1],[index2,page2],...]
+pageindexs = page_index.values.copy()
+np.random.shuffle(pageindexs)
 lg.info(pageindexs)
 
 subf = open(PROPHET_PATH+'submissions/'+VERSION[:-1]+'.csv', 'w')
@@ -72,6 +73,9 @@ for row in tqdm(page_index.iterrows()):
 # Solutions: filter on the Page name first? Make key df for each page first and then just read that little df and merge
 # Go through the page numbers in order and only read the corresponding part of the csv
 # Just stack the predictions up and then merge just once
+lg.info('Start load key df')
+keydf = pd.read_csv('../data/key_1.csv')
+lg.info('Finish load key df')
 lg.info('Start merg on Page')
 df = df.merge(keydf, on='Page', how='left').loc[:,['Id','yhat']]
 lg.info('Finish merg on Page')
