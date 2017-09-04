@@ -1,3 +1,6 @@
+# ignore csvs
+hooker/*.csv
+
 # exclude contents of data dir
 data/*
 model/*
