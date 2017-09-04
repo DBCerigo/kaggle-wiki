@@ -27,7 +27,7 @@ from tqdm import tqdm
 #    * Linear growth
 #    * Fill ALL other NaNs to 0
 #    * Now with try:except: for the `RuntimeError': k initialized to invalid value (-nan)` which replaces first `y` with 0.001
-#    * Set 21 change evenly spaced change points -> `ds.ds[::21]`
+#    * Set n changepoints evenly spaced change points -> `ds.ds[::n]`
 #    
 #* PREDICTIONS
 #    * Truncating predictions at 0 
@@ -41,14 +41,16 @@ RESULTS_PATH = 'results/'
 
 pagedf = pd.read_feather(PROPHET_PATH+'pagedf.f')
 ds = pd.read_feather(PROPHET_PATH+'ds.f')
-# make changepoints
-cps = ds.ds[::21].values
 
 # should break if the dir already exists - avoids accidental overwriting
 VERSION = 'v4/'
 assert VERSION[-1] == '/'
 val_lims = (0,-60)
 #os.makedirs(PROPHET_PATH+VERSION)
+
+# make changepoints
+#changepoints = ds.iloc[val_lims[0]:val_lims[1]].ds[::22].values
+# can't do this because of the NaN outliers that match a changepoint throw error
 
 pagedf = pagedf.fillna(0)
 
@@ -78,6 +80,7 @@ def process_page(page):
         traindf = df.iloc[val_lims[0]:val_lims[1]]
         traindf['train'] = 1 # feather won't serialize bool so 1s and 0s...
         traindf.loc[traindf.y > traindf.y.quantile(.95), ['y']] = np.nan
+        cps = traindf[traindf.y.notnull()].ds[::25].values
         try:
                 m = Prophet(yearly_seasonality=True, changepoints=cps)
                 m.fit(traindf)
@@ -116,7 +119,6 @@ total_proc = mp.cpu_count()
 # NOTE: shuffle the cols to that any pages that still need models built get distributied evenly
 # NOTE: shuffling the index directly switches all the pages from their corresponding series... BAD
 cols = pagedf.columns.values.copy()
-cols = cols[:20]
 np.random.shuffle(cols)
 col_split = np.array_split(cols, total_proc)
 mp_pool = mp.Pool(total_proc)

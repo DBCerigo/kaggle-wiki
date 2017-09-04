@@ -32,6 +32,7 @@ ds = pd.read_feather(PROPHET_PATH+'ds.f')
 #    * Val indexing on -60
 #    * Cut outliers out on upper 95% quartile `forecast.loc[forecast['yhat'] < 0,['yhat']] = 0.0`
 #    * Linear growth
+#    * NO fillna(0) on everything - will use the NaNs as missing data
 #    * Now with try:except: for the `RuntimeError': k initialized to invalid value (-nan)` which replaces first `y` with 0.001
 #       * Now with try:except: for the `TypeError` which replaces first 10 `y` with 0 then first y with 0.001
 #    
@@ -49,7 +50,7 @@ ds = pd.read_feather(PROPHET_PATH+'ds.f')
 VERSION = 'v3/'
 assert VERSION[-1] == '/'
 val_lims = (0,-60)
-os.makedirs(PROPHET_PATH+VERSION)
+#os.makedirs(PROPHET_PATH+VERSION)
 
 # # WARNING:
 # Turned off the chained assignment warning - when slicing dfs they can return copies sometimes instead,
@@ -81,21 +82,22 @@ def process_page(page):
             m = Prophet(yearly_seasonality=True)
             m.fit(traindf)
         except RuntimeError:
-            try:
-                lg.info(base_log_info+'RuntimeError triggered on fit (all 0), replacing first y with 0.001 and retry')
-                traindf.loc[0,'y'] = 0.001
-                m = Prophet(yearly_seasonality=True)
-                m.fit(traindf)
-            except TypeError:
-                lg.info(base_log_info+'TypeError triggered on fit (all NaN), replacing first 10 y with 0 and first y with 0.001 and retry')
-                traindf.loc[:10,'y'] = 0
-                traindf.loc[0,'y'] = 0.001
-                m = Prophet(yearly_seasonality=True)
-                m.fit(traindf)
+            lg.info(base_log_info+'RuntimeError triggered on fit (all 0), replacing first y with 0.001 and retry')
+            traindf.loc[0,'y'] = 0.001
+            m = Prophet(yearly_seasonality=True)
+            m.fit(traindf)
+        except TypeError:
+            lg.info(base_log_info+'TypeError triggered on fit (all NaN), replacing first 10 y with 0 and first y with 0.001 and retry')
+            traindf.loc[:10,'y'] = 0
+            traindf.loc[0,'y'] = 0.001
+            m = Prophet(yearly_seasonality=True)
+            m.fit(traindf)
         forecast = m.predict(ds)
         forecast['yhat_org'] = forecast['yhat']
         forecast.loc[forecast['yhat'] < 0,['yhat']] = 0.0
+        forecast.loc[:,'yhat'] = forecast.yhat.round(0).astype(int)
         forecast = forecast.join(df.y)
+        forecast = forecast.join(df.y_org)
         forecast = forecast.join(traindf.loc[:,['train']]).fillna({'train':0}) # 0 bools
         forecast.to_feather(df_path)
         with open(model_path, 'wb') as file:
