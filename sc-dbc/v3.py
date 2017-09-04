@@ -50,7 +50,7 @@ ds = pd.read_feather(PROPHET_PATH+'ds.f')
 VERSION = 'v3/'
 assert VERSION[-1] == '/'
 val_lims = (0,-60)
-os.makedirs(PROPHET_PATH+VERSION)
+#os.makedirs(PROPHET_PATH+VERSION)
 
 # # WARNING:
 # Turned off the chained assignment warning - when slicing dfs they can return copies sometimes instead,
