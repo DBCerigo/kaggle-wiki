@@ -2,19 +2,8 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 import numpy as np
-import torch.utils.data as data_utils
-import pandas as pd
-import os
-from multiprocessing import cpu_count, Pool
-import sys
-import gc
-from tqdm import tqdm
-import pickle as pkl
 from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import train_test_split
 from .utils import clock
-from .newphet import prophet_plot
-from .val import smape, smape_df
 
 def scale_values(X):
     """Scales and reshapes a numpy array of time series, and returns the scaler
