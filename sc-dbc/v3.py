@@ -82,17 +82,16 @@ def process_page(page):
             m = Prophet(yearly_seasonality=True)
             m.fit(traindf)
         except RuntimeError:
-            try:
-                lg.info(base_log_info+'RuntimeError triggered on fit (all 0), replacing first y with 0.001 and retry')
-                traindf.loc[0,'y'] = 0.001
-                m = Prophet(yearly_seasonality=True)
-                m.fit(traindf)
-            except TypeError:
-                lg.info(base_log_info+'TypeError triggered on fit (all NaN), replacing first 10 y with 0 and first y with 0.001 and retry')
-                traindf.loc[:10,'y'] = 0
-                traindf.loc[0,'y'] = 0.001
-                m = Prophet(yearly_seasonality=True)
-                m.fit(traindf)
+            lg.info(base_log_info+'RuntimeError triggered on fit (all 0), replacing first y with 0.001 and retry')
+            traindf.loc[0,'y'] = 0.001
+            m = Prophet(yearly_seasonality=True)
+            m.fit(traindf)
+        except TypeError:
+            lg.info(base_log_info+'TypeError triggered on fit (all NaN), replacing first 10 y with 0 and first y with 0.001 and retry')
+            traindf.loc[:10,'y'] = 0
+            traindf.loc[0,'y'] = 0.001
+            m = Prophet(yearly_seasonality=True)
+            m.fit(traindf)
         forecast = m.predict(ds)
         forecast['yhat_org'] = forecast['yhat']
         forecast.loc[forecast['yhat'] < 0,['yhat']] = 0.0
