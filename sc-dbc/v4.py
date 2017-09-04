@@ -50,7 +50,7 @@ val_lims = (0,-60)
 
 # make changepoints
 #changepoints = ds.iloc[val_lims[0]:val_lims[1]].ds[::22].values
-# can't do this because of the NaN outlier making it smaller...
+# can't do this because of the NaN outliers that match a changepoint throw error
 
 pagedf = pagedf.fillna(0)
 

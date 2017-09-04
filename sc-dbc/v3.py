@@ -32,6 +32,7 @@ ds = pd.read_feather(PROPHET_PATH+'ds.f')
 #    * Val indexing on -60
 #    * Cut outliers out on upper 95% quartile `forecast.loc[forecast['yhat'] < 0,['yhat']] = 0.0`
 #    * Linear growth
+#    * NO fillna(0) on everything - will use the NaNs as missing data
 #    * Now with try:except: for the `RuntimeError': k initialized to invalid value (-nan)` which replaces first `y` with 0.001
 #       * Now with try:except: for the `TypeError` which replaces first 10 `y` with 0 then first y with 0.001
 #    
@@ -95,7 +96,9 @@ def process_page(page):
         forecast = m.predict(ds)
         forecast['yhat_org'] = forecast['yhat']
         forecast.loc[forecast['yhat'] < 0,['yhat']] = 0.0
+        forecast.loc[:,'yhat'] = forecast.yhat.round(0).astype(int)
         forecast = forecast.join(df.y)
+        forecast = forecast.join(df.y_org)
         forecast = forecast.join(traindf.loc[:,['train']]).fillna({'train':0}) # 0 bools
         forecast.to_feather(df_path)
         with open(model_path, 'wb') as file:
