@@ -50,10 +50,12 @@ assert VERSION[-1] == '/'
 val_lims = (None,None)
 os.makedirs(PROPHET_PATH+VERSION)
 
+BLEND_NUMBER = 'b1'
+
 pagedf = pd.read_feather(PROPHET_PATH+'pagedf.f')
 ds = pd.read_feather(PROPHET_PATH+'ds.f')
 # January, 1st, 2017 up until March 1st, 2017.
-lg.info('Make ds frame')
+lg.info('Make pred_ds frame')
 pred_ds = pd.DataFrame(pd.date_range('1/1/2017', '3/1/2017'), columns=['ds'])
 
 # # WARNING:
@@ -75,12 +77,10 @@ def process_page(page):
         lg.info(base_log_info +'COMPUTE loop')
         df = ds.join(pagedf[page])
         df.columns = ['ds','y']
-        df['y_org'] = df.y
         if page == '93470':
             df.loc[0,'y'] = 67
         # should also consider doing validation on the time period we are forecasting
         traindf = df.iloc[val_lims[0]:val_lims[1]]
-        traindf['train'] = 1 # feather won't serialize bool so 1s and 0s...
         traindf.loc[traindf.y > traindf.y.quantile(.95), ['y']] = np.nan
         try:
             m = Prophet(yearly_seasonality=True)
@@ -96,44 +96,31 @@ def process_page(page):
             traindf.loc[0,'y'] = 0.001
             m = Prophet(yearly_seasonality=True)
             m.fit(traindf)
-        forecast = m.predict(ds)
+        forecast = m.predict(pred_ds)
         forecast['yhat_org'] = forecast['yhat']
         forecast.loc[forecast['yhat'] < 0,['yhat']] = 0.0
         forecast.loc[:,'yhat'] = forecast.yhat.round(0).astype(int)
-        forecast = forecast.join(df.y)
-        forecast = forecast.join(df.y_org)
-        forecast = forecast.join(traindf.loc[:,['train']]).fillna({'train':0}) # 0 bools
         forecast.to_feather(df_path)
         with open(model_path, 'wb') as file:
             pk.dump(m,file)
         lg.info(base_log_info+'COMPUTE and STORE FINISHED')
-    full_smape = wiki.val.smape(forecast.y, forecast.yhat)
-    val_smape = wiki.val.smape(forecast[forecast['train'] == 0].y,forecast[forecast['train'] == 0].yhat)
-    lg.info(base_log_info +'smape calc finished')
-    return (page, full_smape, val_smape)
 
 def wrapper(pages):
     base_log_info = '[Process:{0}] '.format(mp.current_process().name)
-    val_results = []
     lg.info(base_log_info +'starting its pages loop')
     for page in tqdm(pages):
-        val_results.append(process_page(page))
+        process_page(page)
     lg.info(base_log_info +'finished its pages loop')
-    return val_results
 
+# load the pages for this blend for this version
+blend_pages = pd.read_feather(PROPHET_PATH+BLENDS_PATH+BLEND_NUMBER+VERSION[:-2]+'df.f')
+pages = blend_pages.page_index.values.copy()
+np.random.shuffle(pages)
 
 total_proc = mp.cpu_count()
-# NOTE: shuffle the cols to that any pages that still need models built get distributied evenly
-# NOTE: shuffling the index directly switches all the pages from their corresponding series... BAD
-cols = pagedf.columns.values.copy()
-np.random.shuffle(cols)
-col_split = np.array_split(cols, total_proc)
+page_split = np.array_split(pages, total_proc)
 mp_pool = mp.Pool(total_proc)
 with utils.clock():
-    val_results = mp_pool.map(wrapper, col_split)
+    mp_pool.map(wrapper, page_split)
     lg.info('Finished pool map')
-lg.info('Val results recieved - processes ended')
-val_results = [item for sublist in val_results for item in sublist]
-val_results = pd.DataFrame(val_results, columns=['page_index',VERSION[:-1]+'_full',VERSION[:-1]+'_val'])
-val_results.to_feather(PROPHET_PATH+RESULTS_PATH+VERSION[:-1]+'df.f')
 lg.info('Script complete')
