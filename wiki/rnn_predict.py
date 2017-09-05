@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import feather
 
-def get_pages_df(data_dir):
+def get_pages_df_template(data_dir):
 	pages_fp = data_dir+'pages_df.f'
 	if os.path.isfile(pages_fp):
 		pages_df = pd.read_feather(pages_fp)
@@ -43,8 +43,7 @@ def combine_prediction_data(outputs, targets, sequences):
     
     return truth, predictions
 
-def create_prediction_df(outputs, targets, sequences, scaler, pred_df_template):
-	
+def create_prediction_df(pred_df_template, outputs, targets, sequences, scaler):
 	truth, predictions = combine_prediction_data(outputs, targets, sequences)
     truth = scaler.inverse_transform(truth.T).T
     predictions = scaler.inverse_transform(predictions.T).T
@@ -56,5 +55,8 @@ def create_prediction_df(outputs, targets, sequences, scaler, pred_df_template):
 
     return pred_df
 
-def create_page_df():
+def create_page_df(page_df_template, pred_df, col_name):
+    
 	pass
+
+def 
