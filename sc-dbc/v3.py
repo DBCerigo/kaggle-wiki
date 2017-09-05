@@ -118,7 +118,7 @@ def wrapper(pages):
     return val_results
 
 
-total_proc = mp.cpu_count()
+total_proc = mp.cpu_count() - 2
 # NOTE: shuffle the cols to that any pages that still need models built get distributied evenly
 # NOTE: shuffling the index directly switches all the pages from their corresponding series... BAD
 cols = pagedf.columns.values.copy()
