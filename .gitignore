@@ -1,5 +1,6 @@
-# ignore csvs
+# ignore csvs and checkpoints
 hooker/*.csv
+hooker/checkpoints/*
 
 # exclude contents of data dir
 data/*
