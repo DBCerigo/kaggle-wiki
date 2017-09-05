@@ -110,7 +110,7 @@ class RNN(nn.Module):
         all_sequences = []
         for sequences, t in dataloader:
             pred_len = t.size()[1]
-            output = self._predict_batch(self, sequences, pred_len)
+            output = self._predict_batch(sequences, pred_len)
             all_output.append(output)
             all_targets.append(t)
             all_sequences.append(sequences)
@@ -133,10 +133,10 @@ class RNN(nn.Module):
             #The flag volatile=True is essential to stop pytorch storing data 
             #for backprop and using all GPU memory
             targets = Variable(targets, volatile=True).cuda()
-            output = self._predict_batch(self, sequences, pred_len)
+            output = self._predict_batch(sequences, pred_len)
             loss += self.loss_func(output, targets)
             steps+=1
-        average_loss = loss.data[0]/(steps*pred_len)
+        average_loss = loss.data[0]/steps
         return float(average_loss)
 
     def fit(self, trainloader, valloader, optimizer, num_epochs=1, 
@@ -153,19 +153,23 @@ class RNN(nn.Module):
             save_best_path -- string if given, saves the best (val set) 
             performing model here
         """
-
+        #Setting batch size here to 1 since we'll just be using it to keep
+        #track of the size of the batch before
+        batch_size = 1 
         best_val_loss = np.inf
         for epoch in range(num_epochs):
             with clock():
+                print('\nEPOCH %d' % (epoch+1))
                 running_total=0
                 step=0
                 for sequences, targets in trainloader: 
                     #Restart the loader if the last batch is too small
                     if batch_size and sequences.size(0)<batch_size:
                         continue
-                    batch_size = sequence.size(0)
+                    batch_size = sequences.size(0)
 
                     loss = 0
+    
                     h_state = self.init_hidden(batch_size)
                     x=Variable(sequences).cuda()
                     y=Variable(targets).cuda()
@@ -193,8 +197,8 @@ class RNN(nn.Module):
                         print('Running average loss: %f' % running_avg,end='\r')
                     optimizer.step()
                     step += 1
-                average_loss = self.validate(self, valloader)
-                print('\n')
+                average_loss = self.validate(valloader)
+                print('')
                 print('VALIDATION LOSS: %f' % float(average_loss))
                 if save_best_path is not None and average_loss<best_val_loss:
                     best_val_loss = average_loss
