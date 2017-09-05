@@ -1,67 +1,51 @@
 import os.path
 import multiprocessing
+from functools import partial
 import numpy as np
 import pandas as pd
 import feather
+import pickle
 from . import val
+from .utils import clock
 
 def get_pages_df_template(data_dir):
-	"""Fetch from the data directory (or create and save if it doesn't exist) 
-	the pages_df template, which has a row for every page with its name and a 
-	unique id also used in the pred_df. To be populated with smape scores for 
-	that page for a model.
-	
-	Args:
-		data_dir -- string the directory path where it is or should be saved
-	Returns:
-		pages_df -- template described above
-	"""
-	pages_fp = data_dir+'pages_df.f'
-	if os.path.isfile(pages_fp):
-		pages_df = pd.read_feather(pages_fp)
-	else:
-		train_df = pd.read_csv(data_dir+'train_1.csv')
-		pages_df = train_df.Page.to_frame().reset_index()
-		pages_df.columns = ["id", "page"]
-		pages_df.to_feather(pages_fp)
-	return pages_df
-
-def get_pred_df_template(data_dir):
     """Fetch from the data directory (or create and save if it doesn't exist) 
-    the pred_df template, which is a multi-indexed array: 
-    top level columns:
-    - datestring
-    - the 'train' column used in newphet.prophet_plot
-    - a column for each page id
-    second level columns under each page id, for use in newphet.prophet_plot:
-    - y and y_orig representing the original time series
-    _ yhat represeting the predicted values from the model
-
-    To use with newphet.prophet_plot, call get_inner_pred_df with the id of the
-    page you require.
-
+    the pages_df template, which has a row for every page with its name and a 
+    unique id also used in the pred_df. To be populated with smape scores for 
+    that page for a model.
+    
     Args:
         data_dir -- string the directory path where it is or should be saved
     Returns:
-        pred_df -- template described above
+        pages_df -- template described above
     """
-    template_fp = data_dir+'pred_df_template.f'
-    if os.path.isfile(template_fp):
-        template = pd.read_feather(template_fp)
+    pages_fp = data_dir+'pages_df.f'
+    if os.path.isfile(pages_fp):
+        pages_df = pd.read_feather(pages_fp)
+    else:
+        train_df = pd.read_csv(data_dir+'train_1.csv')
+        pages_df = train_df.Page.to_frame().reset_index()
+        pages_df.columns = ["id", "page"]
+        pages_df.to_feather(pages_fp)
+    return pages_df
+
+def get_dates(data_dir):
+    """Fetch from the data directory (or create and save if it doesn't exist) 
+    a nparray with the dates of the timeseries, for use in making the prediction
+    dataframes.
+    Args:
+        data_dir -- string the directory path where it is or should be saved
+    Returns:
+        dates -- np.array described above
+    """
+    dates_fp = data_dir+'dates.npy'
+    if os.path.isfile(dates_fp):
+        dates = pd.read_pickle(dates_fp)
     else:
         train_df = pd.read_csv(data_dir+'train_1.csv')
         dates = train_df.drop('Page', axis=1).transpose().index.values
-        #Multiple index columns - page IDs, then time series + predictions
-        template = pd.DataFrame(
-            columns=pd.MultiIndex.from_product(
-                list(range(len(train_df))),
-                ['y', 'y_org', 'yhat', 'train']
-            )
-        )
-        template['ds', 'ds'] = dates
-        template['train', 'train'] = [1]*490 + [0]*60
-        template.to_feather(template_fp)
-    return template
+        np.save(dates_fp, dates)
+    return dates
 
 def combine_prediction_data(outputs, targets, sequences):
     """Combine prediction data into ground truth and full predicted sequence. 
@@ -75,82 +59,65 @@ def combine_prediction_data(outputs, targets, sequences):
     
     return truth, predictions
 
-def create_prediction_df(pred_df_template, outputs, targets, sequences, scaler):
-    """Create the prediction df which is a multi-indexed array: 
-    top level columns:
-    - datestring
-    - the 'train' column used in newphet.prophet_plot
-    - a column for each page id
-    second level columns under each page id, for use in newphet.prophet_plot:
+def create_pred_dfs(dates, outputs, targets, sequences, scaler):
+    """Gives a list of dataframes, each with columns:
     - y and y_orig representing the original time series
     _ yhat represeting the predicted values from the model
+    which can be used with the val.smape calculation functions and the 
+    newphet.prophet_plot visualisation functions.
+    Use this with the output of model.predict from an unshuffled dataset from
+    the train_1.csv, so that the indices of the list correspond to the page_df
+    ids to store smape values.
     
-    To use with newphet.prophet_plot, call get_inner_pred_df with the id of the
-    page you require.
-
     Args:
-        pred_df_template -- output of get_pred_df_template
+        dates -- output of get_dates()
 	    outputs -- first output of model.predict()
 	    targets -- second output of model.predict()
 	    sequences -- third output of model.predict()
 	    scaler -- the sklearn scaler that originally scaled the data (returned 
 	    from rnn_train.scale_values()
     Returns:
-		populated pred_df described above
+        populated list of pred_dfs described above
     """
     truth, predictions = combine_prediction_data(outputs, targets, sequences)
     truth = scaler.inverse_transform(truth.T).T
     predictions = scaler.inverse_transform(predictions.T).T
 
-    pred_df = pred_df_template.copy(True)
-    for i, (p, t) in enumerate(zip(predictions, truth)):
-        pred_df[i, 'y'] = pred_df[i, 'y_org'] = t
-        pred_df[i, 'yhat'] = p
+    p = multiprocessing.Pool(multiprocessing.cpu_count())
+    dfs = p.map(partial(create_pred_df, dates=dates), zip(predictions,truth))
+    return dfs
 
-    return pred_df
+def create_pred_df(row_tuple, dates):
+    """Create a prediction dataframe from a tuple of predictions. The dataframe
+    has the required columns to be passed to the val.smape calculation functions
+    and the newprophet.prophet_plot visualisation functions."""
+    pred_r, truth_r = row_tuple
+    df = pd.DataFrame()
+    df['ds'] = pd.to_datetime(dates)
+    df['y'] = df['y_org'] = truth_r
+    df['yhat'] = pred_r
+    df['train'] = [1]*490 + [0]*60
+    return df
 
-def get_inner_pred_df(pred_df, page_id):
-    """Get an inner prediction dataframe, with columns for the date, the
-    original time series, the predictions and the dates trained on from the 
-    pred_df.
-
-    Args:
-        pred_df -- output of create_pred_df
-        page_id -- the page id (as per the pages_df template) of the page who's
-        series you require 
-    Returns:
-        df described above
-    """
-    inner = df[[page_id,'ds','train']]
-    inner.columns = inner.columns.get_level_values(1)
-    return inner
-
-def create_pages_df(pages_df_template, pred_df, col_name):
-	"""Create the pages_df, which has a row for every page with its name and a 
-	unique id also used in the pred_df, populated with smape scores for 
-	that page for the model.
+def create_pages_df(pages_df_template, pred_dfs, col_name):
+    """Create the pages_df, which has a row for every page with its name and a 
+    unique id also used in the pred_df, populated with smape scores for 
+    that page for the model.
 	
-	Args:
+    Args:
         pages_df_template -- output of get_pages_df_template
-        pred_df -- output of create_pred_df
+        pred_dfs -- output of create_pred_df. Must be indexed 
         col_name -- the name of the column to store the smape values in the 
         resulting df
-	Returns:
-		populated pages_df described above
-	"""
-	p = multiprocessing.Pool(multiprocessing.cpu_count())
+    Returns:
+        populated pages_df described above
+    """
+    p = multiprocessing.Pool(multiprocessing.cpu_count())
 
-	smape = p.map(calculate_smape_inner_df, inner_array_generator(pred_df))
+    smape = p.map(calculate_smape_inner_df, pred_dfs)
 
-	pages_df_template[col_name] = smape
-	return pages_df_template
-
-def inner_array_generator(pred_df):
-    """Generator returning all inner dfs of the pred_df"""
-    #Cut off the last two level 0 column headers (which are 'ds' and 'train') to
-    #leave just the page indices
-    for index in df.columns.levels[0].values[-2]:
-        yield get_inner_pred_df(pred_df, index)
+    pages_df_template[col_name] = smape
+    return pages_df_template
 
 def calculate_smape_inner_df(df):
     """Calculate smape from an inner df of the pred_df"""

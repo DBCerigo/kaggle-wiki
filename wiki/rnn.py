@@ -94,7 +94,7 @@ class RNN(nn.Module):
         
         return torch.cat(output, dim=1)
 
-    def predict(self, dataloader, targets=True):
+    def predict(self, dataloader):
         """Given a data loader, predict the next steps in the time series and 
         return predictions and the whole time series for analysis. 
 
@@ -115,7 +115,7 @@ class RNN(nn.Module):
             all_targets.append(t)
             all_sequences.append(sequences)
         cat = lambda x: torch.cat(x, dim=0)
-        return cat(all_output), cat(all_sequences), cat(all_targets)
+        return cat(all_output), cat(all_targets), cat(all_sequences)
 
     def validate(self, valloader):
         """Predict on a dataloader and return the average loss against the 
