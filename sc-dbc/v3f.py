@@ -47,10 +47,12 @@ RESULTS_PATH = 'results/'
 # should break if the dir already exists - avoids accidental overwriting
 VERSION = 'v3f/'
 assert VERSION[-1] == '/'
+assert VERSION[-2] == 'f'
 val_lims = (None,None)
-os.makedirs(PROPHET_PATH+VERSION)
+#os.makedirs(PROPHET_PATH+VERSION)
 
-BLEND_NUMBER = 'b1'
+BLEND_NUMBER = 'b1/'
+assert BLEND_NUMBER[-1] == '/'
 
 pagedf = pd.read_feather(PROPHET_PATH+'pagedf.f')
 ds = pd.read_feather(PROPHET_PATH+'ds.f')
