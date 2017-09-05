@@ -28,7 +28,7 @@ assert VERSION[-2] == 'f'
 
 
 def process_page(page_num):
-    base_log_info = '[Process:{0}, on page:{1}] '.format(mp.current_process().name, index_page[0])
+    base_log_info = '[Process:{0}, on page:{1}] '.format(mp.current_process().name, page_num)
     lg.info(base_log_info)
     # use index_page[0] to load model
     lg.info(base_log_info+'Start load forecast')
@@ -36,7 +36,7 @@ def process_page(page_num):
     lg.info(base_log_info+'Finished load forecast')
     # use page_index.loc[page_num] and apply to make key col
     lg.info(base_log_info+'Start apply make page_date col')
-    tdf['Page'] = tdf.ds.apply(lambda x: page_index.loc[page_num].Page+'_'+str(x.date()))
+    tdf['Page'] = tdf.ds.apply(lambda x: page_index.loc[int(page_num)].Page+'_'+str(x.date()))
     lg.info(base_log_info+'Finish apply make page_date col')
     lg.info(base_log_info+'Start del ds column')
     del tdf['ds']
@@ -64,13 +64,14 @@ page_index = page_index.set_index('page_index')
 
 lg.info('Start load blend version df')
 blend_pages = pd.read_feather(PROPHET_PATH+BLENDS_PATH+BLEND_NUMBER
-                              +VERSION[:-1]+'df.f')
+                              +VERSION[:-2]+'df.f')
 blend_pages = blend_pages.values.flatten()
+# testing
+#blend_pages = blend_pages[:100]
 np.random.shuffle(blend_pages)
-blend_pages_split = np.array_split(blend_pages, total_proc)
-
 # parallel processing loop
 total_proc = 1# mp.cpu_count()
+blend_pages_split = np.array_split(blend_pages, total_proc)
 mp_pool = mp.Pool(total_proc)
 with utils.clock():
     dfs = mp_pool.map(wrapper, blend_pages_split)
