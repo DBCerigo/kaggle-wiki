@@ -94,7 +94,7 @@ class RNN(nn.Module):
         
         return torch.cat(output, dim=1)
 
-    def predict(self, dataloader, targets=True):
+    def predict(self, dataloader):
         """Given a data loader, predict the next steps in the time series and 
         return predictions and the whole time series for analysis. 
 
