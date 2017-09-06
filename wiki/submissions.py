@@ -1,5 +1,6 @@
 import os.path
 import pandas as pd
+import numpy as np
 from collections import defaultdict
 import csv
 from tqdm import tqdm
@@ -15,9 +16,9 @@ def write_submission(predictions, fp, base_dir='../data/'):
         ordering the same as in train_1.csv
         fp - string filepath to save to
     """
-    predictions = predictions.round().clip(0)
-    ids = submissions.get_ids_df(base_dir).drop('Page', axis=1).values
-    submission = DataFrame(
+    predictions = predictions.round().clip(0).astype(int)
+    ids = get_ids_df(base_dir).drop('Page', axis=1).values
+    submission = pd.DataFrame(
         data=np.stack([ids.reshape(-1), predictions.reshape(-1)], axis=1),
         columns=['Id', 'Visits']
     )
