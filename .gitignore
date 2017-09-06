@@ -2,6 +2,10 @@
 hooker/*.csv
 hooker/checkpoints/*
 
+# ignore feather files and zips
+*.f
+*.zip
+
 # exclude contents of data dir
 data/*
 model/*
