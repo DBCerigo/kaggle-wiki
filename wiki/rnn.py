@@ -197,9 +197,10 @@ class RNN(nn.Module):
                         print('Running average loss: %f' % running_avg,end='\r')
                     optimizer.step()
                     step += 1
-                average_loss = self.validate(valloader)
                 print('')
-                print('VALIDATION LOSS: %f' % float(average_loss))
-                if save_best_path is not None and average_loss<best_val_loss:
-                    best_val_loss = average_loss
-                    torch.save(self, save_best_path)
+                if valloader is not None:
+                    average_loss = self.validate(valloader)
+                    print('VALIDATION LOSS: %f' % float(average_loss))
+                    if save_best_path is not None and average_loss<best_val_loss:
+                        best_val_loss = average_loss
+                        torch.save(self, save_best_path)
