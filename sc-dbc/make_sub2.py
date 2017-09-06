@@ -1,4 +1,5 @@
 # coding: utf-8
+# final submission should have 8703780 rows
 
 import logging as lg
 lg.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=lg.INFO)
@@ -64,13 +65,13 @@ page_index = page_index.set_index('page_index')
 
 lg.info('Start load blend version df')
 blend_pages = pd.read_feather(PROPHET_PATH+BLENDS_PATH+BLEND_NUMBER
-                              +VERSION[:-2]+'df.f')
+                              +'v3_val'+'df.f')
 blend_pages = blend_pages.values.flatten()
 # testing
 #blend_pages = blend_pages[:100]
 np.random.shuffle(blend_pages)
 # parallel processing loop
-total_proc = 1# mp.cpu_count()
+total_proc = mp.cpu_count()
 blend_pages_split = np.array_split(blend_pages, total_proc)
 mp_pool = mp.Pool(total_proc)
 with utils.clock():
