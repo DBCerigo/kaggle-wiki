@@ -32,7 +32,6 @@ class RNN(nn.Module):
         self.num_feats = num_feats
         self.embedding_out = embedding_out
 
-        print(1+num_feats+embedding_out)
         self.rnn = nn.GRU(
             input_size = 1+num_feats+embedding_out,
             hidden_size = self.hidden_units,
@@ -67,7 +66,7 @@ class RNN(nn.Module):
         output.append(iv)
         for i in range(pred_len-1):
             #We get the time dependent covariates from the 'targets'
-            time_dep = t[:,i:i+1,1:-1]
+            time_dep = targets[:,i:i+1,1:-1]
             input_variable = torch.cat([iv, time_dep, embed_1], dim=2)
             encoder_out, h_state = self(input_variable, h_state)
             iv = encoder_out
@@ -114,8 +113,8 @@ class RNN(nn.Module):
             #The flag volatile=True is essential to stop pytorch storing data 
             #for backprop and using all GPU memory
             targets = Variable(targets, volatile=True).cuda()
-            output = self._predict_batch(sequences, pred_len)
-            loss += self.loss_func(output, targets)
+            output = self._predict_batch(sequences, targets, pred_len)
+            loss += self.loss_func(output, targets[:,:,:1])
             steps+=1
         average_loss = loss.data[0]/steps
         return float(average_loss)
@@ -196,4 +195,4 @@ class RNN(nn.Module):
                     print('VALIDATION LOSS: %f' % float(average_loss))
                     if save_best_path is not None and average_loss<best_val_loss:
                         best_val_loss = average_loss
-                        torch.save(self, save_best_path)
+                        torch.save(self.state_dict(), save_best_path)
