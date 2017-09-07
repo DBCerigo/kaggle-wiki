@@ -26,13 +26,15 @@ def scale_values(X):
     return X, sc 
 
 class RNN(nn.Module):
-    """Class to represent the RNN model. A similar model with meta features and
-    a timeseries embedding can be round in rnn_meta.py
+    """Class to represent the RNN model.
 	
-    Todo (potential):
+    Todo:
         - implement ideas from (https://arxiv.org/pdf/1704.04110.pdf):  
             - outputting mean and variance and maximising log likelihood of 
             negative binomial distribution
+            - including extra features specifically day of week, week/month of
+            year, and 
+            - an embedding to capture groupings of like pages
     """
     def __init__(self, loss_func=None, teacher_forcing_ratio=0.5):
         """
@@ -61,7 +63,7 @@ class RNN(nn.Module):
         self.out = nn.Linear(self.hidden_units, 1)
 
         self.loss_func = nn.L1Loss() if loss_func is None else loss_func
-        self.teacher_forcing_ratio = teacher_forcing_ratio
+        self.teacher_forcing_ratio = 0.5
         
     def forward(self, x, h_state):
         # dimensions:
