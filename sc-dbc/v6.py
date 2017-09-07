@@ -40,8 +40,10 @@ from tqdm import tqdm
 PROPHET_PATH = '../data/prophet/'
 RESULTS_PATH = 'results/'
 
+lg.info('Loading base pagedf and ds')
 pagedf = pd.read_feather(PROPHET_PATH+'pagedf.f')
 ds = pd.read_feather(PROPHET_PATH+'ds.f')
+lg.info('Finished loading base pagedf and ds')
 
 # should break if the dir already exists - avoids accidental overwriting
 VERSION = 'v6/'
@@ -104,9 +106,12 @@ def process_page(page):
     return (page, train_smape, val_smape)
 
 def wrapper(pages):
+    base_log_info = '[Process:{0}] '.format(mp.current_process().name)
     val_results = []
+    lg.info(base_log_info +'starting its pages loop')
     for page in tqdm(pages):
         val_results.append(process_page(page))
+    lg.info(base_log_info +'finished its pages loop')
     return val_results
 
 # testing
@@ -120,6 +125,8 @@ col_split = np.array_split(cols, total_proc)
 mp_pool = mp.Pool(total_proc)
 with utils.clock():
     val_results = mp_pool.map(wrapper, col_split)
+    lg.info('Finished pool map')
+lg.info('Val results recieved - processes ended')
 val_results = [item for sublist in val_results for item in sublist]
 val_results = pd.DataFrame(val_results, columns=['page_index',VERSION[:-1]+'_train',VERSION[:-1]+'_val'])
 val_results.to_feather(PROPHET_PATH+RESULTS_PATH+VERSION[:-1]+'df.f')
