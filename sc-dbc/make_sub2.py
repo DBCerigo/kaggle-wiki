@@ -70,7 +70,7 @@ np.random.shuffle(blend_pages)
 blend_pages_split = np.array_split(blend_pages, total_proc)
 
 # parallel processing loop
-total_proc = 1# mp.cpu_count()
+total_proc =  mp.cpu_count()
 mp_pool = mp.Pool(total_proc)
 with utils.clock():
     dfs = mp_pool.map(wrapper, blend_pages_split)
