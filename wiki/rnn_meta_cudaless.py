@@ -2,39 +2,12 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 import numpy as np
-from sklearn.preprocessing import StandardScaler
 from .utils import clock
 
-def scale_values(X):
-    """Scales and reshapes a numpy array of time series, and returns the scaler
-    for later unscaling.
-
-    Args:
-        X -- numpy array of shape (145063, 550) holding time series data
-    Returns:
-        X -- numpy array of shape (145063, 550, 1) with the time series data
-        rescaled around mean 0
-        sc -- sklearn scaler with .inverse_transform method to convert back to
-        original scaling
-
-    """
-
-    sc = StandardScaler()
-    X = sc.fit_transform(X.T).T
-    assert(np.isclose(np.mean(X[0]),0))
-    X = X.reshape(X.shape + (1,))
-    return X, sc 
-
 class RNN(nn.Module):
-    """Class to represent the RNN model. A similar model with meta features and
-    a timeseries embedding can be round in rnn_meta.py
-	
-    Todo (potential):
-        - implement ideas from (https://arxiv.org/pdf/1704.04110.pdf):  
-            - outputting mean and variance and maximising log likelihood of 
-            negative binomial distribution
-    """
-    def __init__(self, loss_func=None, teacher_forcing_ratio=0.5):
+    """Class to represent the RNN model with meta features."""
+    def __init__(self, loss_func=None, teacher_forcing_ratio=0.5,
+            embedding_in=145063, embedding_out=20, num_feats=3):
         """
         Args:
             lost_func -- pytorch loss function. Note only loss functions where
@@ -42,53 +15,59 @@ class RNN(nn.Module):
             teacher_forcing_ratio -- float between 0 and 1. Percentage of time 
             to force the model to train on target data (rather than its own 
             recursive output
+            embedding_in -- int number of indices the embedding maps from
+            (default 145603 - number of series)
+            embedding_out -- int number of dimensions embedding maps to (default
+            20)
+            num_feats -- int number of self made features (ie age, day of
+            week, week of year) (default 3)
         """
         super().__init__()
-         
+
+        self.embedding = torch.nn.Embedding(embedding_in, embedding_out)
+
         self.hidden_units = 128
         self.n_layers = 2
-        
+
+        self.num_feats = num_feats
+        self.embedding_out = embedding_out
+
+        print(1+num_feats+embedding_out)
         self.rnn = nn.GRU(
-            input_size=1,
-            hidden_size=self.hidden_units,
-            num_layers=self.n_layers, #number of RNN layers
-            batch_first=True, #batch dimension is first
+            input_size = 1+num_feats+embedding_out,
+            hidden_size = self.hidden_units,
+            num_layers=self.n_layers,
+            batch_first=True,
             dropout=0.2
         )
-
-        #I can change the below to two softplus outputs for
-        #mean and variance in the paper version (see notes below)
+        
         self.out = nn.Linear(self.hidden_units, 1)
 
         self.loss_func = nn.L1Loss() if loss_func is None else loss_func
         self.teacher_forcing_ratio = teacher_forcing_ratio
-        
-    def forward(self, x, h_state):
-        # dimensions:
-        # x (batch, time_step, input_size)
-        # h_state (n_layers, batch, hidden_size)
-        # r_out (batch, time_step, hidden_size)
-        r_out, h_state = self.rnn(x, h_state)
-        return self.out(r_out), h_state
-    
-    def init_hidden(self, batch_size):
-        hidden = Variable(
-			torch.zeros(self.n_layers, batch_size, self.hidden_units
-		)).cuda()
-        return hidden
+
+    def forward(self, x, h_state=None):
+        return self.rnn(x, h_state)
 
     def _predict_batch(self, sequence_batch, pred_len):
         output = []
-        h_state = self.init_hidden(sequence_batch.size()[0])
-        x=Variable(sequence_batch, volatile=True).cuda()
-        encoder_out, h_state = self(x, h_state)
+        x=Variable(sequence_batch[:,:,:-1], volatile=True)
+        e=Variable(sequence_batch[:,:,-1].long(), volatile=True)
+        
+        embed = self.embedding(e)
+        x = torch.cat([x, embed], dim=2)
 
+        encoder_out, h_state = self(x)
+
+        #e is the same for all timesteps so we just pick the last one
+        embed_1 = embed[:,-1:,:]
         input_variable = encoder_out[:,-1:,:]
-        output.append(input_variable)
+        output.append(self.out(input_variable))
         for i in range(pred_len-1):
+            input_variable = torch.cat([input_variable, embed_1], dim=2)
             encoder_out, h_state = self(input_variable, h_state)
             input_variable = encoder_out
-            output.append(encoder_out)
+            output.append(self.out(encoder_out))
         
         return torch.cat(output, dim=1)
 
@@ -130,7 +109,7 @@ class RNN(nn.Module):
             pred_len = targets.size()[1]
             #The flag volatile=True is essential to stop pytorch storing data 
             #for backprop and using all GPU memory
-            targets = Variable(targets, volatile=True).cuda()
+            targets = Variable(targets, volatile=True)
             output = self._predict_batch(sequences, pred_len)
             loss += self.loss_func(output, targets)
             steps+=1
@@ -168,23 +147,34 @@ class RNN(nn.Module):
 
                     loss = 0
     
-                    h_state = self.init_hidden(batch_size)
-                    x=Variable(sequences).cuda()
-                    y=Variable(targets).cuda()
+                    x=Variable(sequences[:,:,:-1])
+                    e=Variable(sequences[:,:,-1].long())
+                    #e=Variable(sequences[:,:,-1:], requires_grad=False)
+                    y=Variable(targets)
+
+                    embed = self.embedding(e)
+                    x = torch.cat([x, embed], dim=2)
 
                     #run through 'encoder' stage
-                    encoder_out, h_state = self(x, h_state) 
+                    print(x.size())
+                    encoder_out, h_state = self(x)
 
                     #Now 'decoder' stage
                     rand = np.random.rand() 
                     use_teacher_forcing =  rand < self.teacher_forcing_ratio
+                    #e is the same for all timesteps so we just pick the last
+                    #one
+                    embed_1 = embed[:,-1:,:]
                     for i in range(y.size()[1]-1):
                         if use_teacher_forcing:
-                            input_variable = y[:,i:i+1,:] 
+                            iv = y[:,i:i+1,:] 
                         else:
-                            input_variable = encoder_out[:,-1:,:]
+                            iv = encoder_out[:,-1:,:]
+                        input_variable = torch.cat([iv, embed_1], dim=2)
                         encoder_out, h_state = self(input_variable, h_state)
-                        loss += self.loss_func(encoder_out, y[:,i+1:i+2,:])
+                        loss += self.loss_func(
+                            self.out(encoder_out), y[:,i+1:i+2,:]
+                        )
 
                     optimizer.zero_grad()                   
                     loss.backward()
