@@ -1,8 +1,5 @@
 
-# coding: utf-8
-
-# In[1]:
-
+print('Importing packages...')
 
 import sys
 import gc
@@ -31,12 +28,13 @@ batch_size = 1024
 
 # In[3]:
 
-
+print('Importing DF...')
 train_df = pd.read_csv(base_dir+'train_1.csv').fillna(0)
 
 
 # In[4]:
 
+print('Making features...')
 
 values = train_df.drop('Page', axis=1).values ; values.shape
 
@@ -98,8 +96,7 @@ features = np.stack([values, br(ages), br(dows), br(woys), br(series_idxs)], axi
 # In[13]:
 
 
-features.shape
-
+print('Features made')
 
 # In[14]:
 
@@ -123,12 +120,14 @@ valloader = data_utils.DataLoader(
 # In[15]:
 
 
+print('Making model')
 model = rnn_meta.RNN().cuda()
 
 
 # In[16]:
 
 
+print('Beginning training')
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 save_best_path = base_dir+'rnn_v3_lr1_weights.mdl'
 with clock():
@@ -163,3 +162,4 @@ outputs, targets, sequences = model.predict(valloader)
 
 np.save(base_dir+'rnn_v3_predictions.npy', outputs)
 
+f.close()
