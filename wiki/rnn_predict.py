@@ -51,8 +51,11 @@ def combine_prediction_data(outputs, targets, sequences):
     """Combine prediction data into ground truth and full predicted sequence. 
     Use args outputted from model.predict()"""
     predictions_end = outputs.cpu().data.numpy().squeeze()
-    truth_end = targets.cpu().numpy().squeeze()
     truth_start = sequences.cpu().numpy().squeeze()
+    try:
+        truth_end = targets.cpu().numpy().squeeze()
+    except:
+        truth_end = targets.data.cpu().numpy().squeeze()
 
     truth = np.concatenate((truth_start, truth_end), axis=1) ; truth.shape
     predictions = np.concatenate((truth_start, predictions_end), axis=1)

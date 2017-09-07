@@ -90,10 +90,11 @@ class RNN(nn.Module):
         all_sequences = []
         for sequences, t in dataloader:
             pred_len = t.size()[1]
+            t = Variable(t, volatile=True).cuda()
             output = self._predict_batch(sequences, t, pred_len)
             all_output.append(output)
-            all_targets.append(t)
-            all_sequences.append(sequences)
+            all_targets.append(t[:,:,1])
+            all_sequences.append(sequences[:,:,1])
         cat = lambda x: torch.cat(x, dim=0)
         return cat(all_output), cat(all_targets), cat(all_sequences)
 
