@@ -7,13 +7,13 @@ from tqdm import tqdm
 
 def write_submission(predictions, fp, base_dir='../data/'):
     """Write a submission file from a numpy array containing predictions. MUST
-    BE IN THE SAME ORDER in the first dimension as the train_1.csv of pages! It
+    BE IN THE SAME ORDER in the first dimension as the train_2.csv of pages! It
     just makes sense ok. The predictions will be clipped at 0 and rounded to
     integers.
 
     Args:
         predictions -- np.array shape (145063, 60) of predictions with the page
-        ordering the same as in train_1.csv
+        ordering the same as in train_2.csv
         fp - string filepath to save to
     """
     predictions = predictions.round().clip(0).astype(int)
@@ -27,7 +27,7 @@ def write_submission(predictions, fp, base_dir='../data/'):
 def get_ids_df(data_dir):
     """Reads from file, or creates and saves if necessary, a dataframe with 
     columns:
-        Page: each page ordered the same as train_1.csv
+        Page: each page ordered the same as train_2.csv
         one for each date in the range, ordered by time increasing
     with values as the ids for submission.
     I use it by dropping the Page column and taking the values (see function
@@ -52,7 +52,7 @@ def _create_ids_dict(data_dir, daterange):
     Daterange given as argument to confirm that the ids appear in date
     increasing order in the key.csv."""
     key_dict = defaultdict(list)
-    with open(os.path.join(data_dir, 'key_1.csv')) as csvfile:
+    with open(os.path.join(data_dir, 'key_2.csv')) as csvfile:
         reader = csv.DictReader(csvfile)
         for i, row in tqdm(enumerate(reader)):
             split = row['Page'].split('_')
@@ -71,16 +71,16 @@ def _create_ids_df(data_dir):
     #Create a list of the dates used, as strings in the right format
     daterange = list(map(
         lambda x: str(x.date()),
-        pd.date_range(start='2017-01-01', end='2017-03-01')
+        pd.date_range(start='2017-09-13', end='2017-11-13')
     ))
 
     print('Creating page to id dictionary...')
     key_dict = _create_ids_dict(data_dir, daterange)
-    print('Resorting to same order as train_1.csv...')
+    print('Resorting to same order as train_2.csv...')
     id_df = pd.DataFrame.from_dict(key_dict, orient='index')
     id_df.columns = daterange
 
-    train = pd.read_csv(os.path.join(data_dir, 'train_1.csv'))
+    train = pd.read_csv(os.path.join(data_dir, 'train_2.csv'))
     train_df = train.set_index('Page')
     joined = train_df.join(id_df, how='inner')
 

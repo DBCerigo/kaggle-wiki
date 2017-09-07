@@ -23,7 +23,8 @@ def get_pages_df_template(data_dir):
     if os.path.isfile(pages_fp):
         pages_df = pd.read_feather(pages_fp)
     else:
-        train_df = pd.read_csv(data_dir+'train_1.csv')
+        print('No pages df template found. Creating and saving...')
+        train_df = pd.read_csv(data_dir+'train_2.csv')
         pages_df = train_df.Page.to_frame().reset_index()
         pages_df.columns = ["id", "page"]
         pages_df.to_feather(pages_fp)
@@ -42,7 +43,8 @@ def get_dates(data_dir):
     if os.path.isfile(dates_fp):
         dates = pd.read_pickle(dates_fp)
     else:
-        train_df = pd.read_csv(data_dir+'train_1.csv')
+        print('No dates df template found. Creating and saving...')
+        train_df = pd.read_csv(data_dir+'train_2.csv')
         dates = train_df.drop('Page', axis=1).transpose().index.values
         np.save(dates_fp, dates)
     return dates
@@ -69,7 +71,7 @@ def create_pred_dfs(dates, outputs, targets, sequences, scaler):
     which can be used with the val.smape calculation functions and the 
     newphet.prophet_plot visualisation functions.
     Use this with the output of model.predict from an unshuffled dataset from
-    the train_1.csv, so that the indices of the list correspond to the page_df
+    the train_2.csv, so that the indices of the list correspond to the page_df
     ids to store smape values.
     
     Args:
