@@ -47,27 +47,31 @@ class RNN(nn.Module):
         self.teacher_forcing_ratio = teacher_forcing_ratio
 
     def forward(self, x, h_state=None):
-        return self.rnn(x, h_state)
+        r_out, h_state = self.rnn(x, h_state)
+        return self.out(r_out), h_state
 
-    def _predict_batch(self, sequence_batch, pred_len):
+    def _predict_batch(self, sequence_batch, targets, pred_len):
         output = []
         x=Variable(sequence_batch[:,:,:-1], volatile=True)
         e=Variable(sequence_batch[:,:,-1].long(), volatile=True)
         
         embed = self.embedding(e)
-        x = torch.cat([x, embed], dim=2)
+        inp = torch.cat([x, embed], dim=2)
 
-        encoder_out, h_state = self(x)
+        encoder_out, h_state = self(inp)
 
         #e is the same for all timesteps so we just pick the last one
         embed_1 = embed[:,-1:,:]
-        input_variable = encoder_out[:,-1:,:]
-        output.append(self.out(input_variable))
+
+        iv = encoder_out[:,-1:,:]
+        output.append(iv)
         for i in range(pred_len-1):
-            input_variable = torch.cat([input_variable, embed_1], dim=2)
+            #We get the time dependent covariates from the 'targets'
+            time_dep = t[:,i:i+1,1:-1]
+            input_variable = torch.cat([iv, time_dep, embed_1], dim=2)
             encoder_out, h_state = self(input_variable, h_state)
-            input_variable = encoder_out
-            output.append(self.out(encoder_out))
+            iv = encoder_out
+            output.append(encoder_out)
         
         return torch.cat(output, dim=1)
 
@@ -87,7 +91,7 @@ class RNN(nn.Module):
         all_sequences = []
         for sequences, t in dataloader:
             pred_len = t.size()[1]
-            output = self._predict_batch(sequences, pred_len)
+            output = self._predict_batch(sequences, t, pred_len)
             all_output.append(output)
             all_targets.append(t)
             all_sequences.append(sequences)
@@ -156,24 +160,26 @@ class RNN(nn.Module):
                     x = torch.cat([x, embed], dim=2)
 
                     #run through 'encoder' stage
-                    print(x.size())
                     encoder_out, h_state = self(x)
 
                     #Now 'decoder' stage
                     rand = np.random.rand() 
                     use_teacher_forcing =  rand < self.teacher_forcing_ratio
+                    use_teacher_forcing = False
                     #e is the same for all timesteps so we just pick the last
                     #one
                     embed_1 = embed[:,-1:,:]
                     for i in range(y.size()[1]-1):
+                        #Get the time dependent features
+                        time_dep = y[:,i:i+1,1:-1]
                         if use_teacher_forcing:
-                            iv = y[:,i:i+1,:] 
+                            iv = y[:,i:i+1,:1]
                         else:
                             iv = encoder_out[:,-1:,:]
-                        input_variable = torch.cat([iv, embed_1], dim=2)
+                        input_variable = torch.cat([iv,time_dep,embed_1], dim=2)
                         encoder_out, h_state = self(input_variable, h_state)
                         loss += self.loss_func(
-                            self.out(encoder_out), y[:,i+1:i+2,:]
+                            encoder_out, y[:,i+1:i+2,:1]
                         )
 
                     optimizer.zero_grad()                   
