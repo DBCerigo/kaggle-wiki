@@ -70,7 +70,6 @@ def process_page(page):
         lg.info(base_log_info +'COMPUTE loop')
         df = ds.join(pagedf[page])
         df.columns = ['ds','y']
-        df = df.iloc[:val_lim]
         df['y_org'] = df.y
         # should also consider doing validation on the time period we are forecasting
         traindf = df.iloc[train_lims[0]:train_lims[1]]
@@ -93,6 +92,7 @@ def process_page(page):
         forecast['yhat_org'] = forecast['yhat']
         forecast.loc[forecast['yhat'] < 0,['yhat']] = 0.0
         forecast.loc[:,'yhat'] = forecast.yhat.round(0).astype(int)
+        df = df.iloc[:val_lim]
         forecast = forecast.join(df.y)
         forecast = forecast.join(df.y_org)
         forecast = forecast.join(traindf.loc[:,['train']]).fillna({'train':0}) # 0 bools
