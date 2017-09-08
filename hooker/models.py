@@ -17,12 +17,19 @@ from datasets import generate_x_y_data_v3
 
 class BaseSeq2Seq:
 
-    def __init__(self, n_cond, n_pred):
+    def __init__(self, n_cond, n_pred, teacher_forcing_ratio=0.5):
         self.n_cond = n_cond
         self.n_pred = n_pred
+        self.teacher_forcing_ratio = teacher_forcing_ratio
 
-    def train_sine(self, epochs=100, report_error_avg=10, batch_size=100):
+    def train_sine(self, epochs=100, report_error_avg=10, batch_size=100, logdir='tf-log/fourier/'):
         # input_batch, target_batch = val_data.next()
+        self.sess = tf.Session(graph=self.graph)
+        self.sess.run(self.init)
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        stats_writer = tf.summary.FileWriter(os.path.join(logdir,
+                                                          timestamp),
+                                             graph=self.graph)
         for e in range(epochs):
             running_error = 0.
             val_error = 0.
@@ -33,19 +40,35 @@ class BaseSeq2Seq:
                     input_batch = input_batch.reshape(input_batch.shape[0],-1).T
                     target_batch = target_batch.reshape(target_batch.shape[0],-1).T
                     #     print(input_batch.shape, target_batch.shape)
-                    feed_dict = {self.train: True}
+                    feed_dict = {self.teacher_force: np.random.random_sample()<self.teacher_forcing_ratio, self.keep_prob: 1.0}
                     # each decoder input is batch size x 1
                     feed_dict = self.feed_vals(input_batch, target_batch, feed_dict)
-                    _, err = sess.run([self.train_op, self.loss], feed_dict=feed_dict)
+                    _, err, summary = self.sess.run([self.train_op, self.loss, self.summary_op], feed_dict=feed_dict)
                     mean_preds = np.mean(input_batch[:,:], axis=1).reshape(-1,1)
                     mean_errs = np.abs(mean_preds - target_batch)
-                    batch_mean_err = np.sum(np.mean(mean_errs, axis=0))
+                    batch_mean_err = np.mean(mean_errs)
                     running_error += err
                     mean_running_error += batch_mean_err
+                for i in range(report_error_avg):
+                    input_batch, target_batch = generate_x_y_data_v3(True, batch_size)
+                    input_batch = input_batch.reshape(input_batch.shape[0],-1).T
+                    target_batch = target_batch.reshape(target_batch.shape[0],-1).T
+                    #     print(input_batch.shape, target_batch.shape)
+                    feed_dict = {self.teacher_force: False, self.keep_prob: 1.0}
+                    # each decoder input is batch size x 1
+                    feed_dict = self.feed_vals(input_batch, target_batch, feed_dict)
+                    val_err, summary = self.sess.run([self.loss, self.summary_op], feed_dict=feed_dict)
+                    val_error += val_err
+                    # stats_writer.add_summary(summary, e*report_error_avg + i)
                 running_error /= report_error_avg
                 mean_running_error /= report_error_avg
+                val_error /= report_error_avg
+
+
+            
             print("""End of epoch {0}: running error average = {1:.3f}
-                     mean error average = {2:.3f}""".format(e + 1, running_error, mean_running_error))
+                     mean error average = {2:.3f}
+                     val error average = {3:.3f}""".format(e + 1, running_error, mean_running_error, val_error))
 
 
     def train(self,
@@ -71,7 +94,7 @@ class BaseSeq2Seq:
             with clock():
                 for input_batch, target_batch in train_data:
         #     print(input_batch.shape, target_batch.shape)
-                    feed_dict = {self.is_train: True, self.keep_prob: keep_prob}
+                    feed_dict = {self.teacher_force: np.random.random_sample()<self.teacher_forcing_ratio, self.keep_prob: keep_prob}
                     # each decoder input is batch size x 1
                     feed_dict = self.feed_vals(input_batch, target_batch, feed_dict)
                     _, err = self.sess.run([self.train_op, self.loss], feed_dict=feed_dict)
@@ -86,7 +109,7 @@ class BaseSeq2Seq:
                     self.saver.save(self.sess, model_dir+'/model.ckpt'.format(timestamp), global_step=e+1)
 
             for input_batch, target_batch in valid_data:
-                feed_dict = {self.is_train: False, self.keep_prob: 1.0}
+                feed_dict = {self.teacher_force: False, self.keep_prob: 1.0, self.supervise_train: True}
                 feed_dict = self.feed_vals(input_batch, target_batch, feed_dict)
                 val_err = self.sess.run(self.loss, feed_dict=feed_dict)
                 # this time we don't need to feed in either decoder_inputs or targets
@@ -118,7 +141,7 @@ class BaseSeq2Seq:
         new_saver.restore(self.sess, tf.train.latest_checkpoint(dirname))
 
     def view_preds(self, inputs, targets, n_view=10, one_step=False):
-        preds = self.predict(inputs, targets, one_step)
+        preds = self.predict(inputs, targets, one_step=one_step)
         for i in range(n_view):
             fig = plt.figure()
             print(i)
@@ -133,17 +156,19 @@ class MixedSeq2Seq(BaseSeq2Seq):
     def __init__(self, n_cond, n_pred, hidden_dim,
                  n_layers=2,
                  input_dim=1,
-                 learning_rate=0.01,
+                 learning_rate=0.001,
                  output_dim=1,
-                 cell_type='GRU'):
+                 cell_type='GRU',
+                 optimizer='Adam', 
+                 teacher_forcing_ratio=0.5):
         """
         Construct graph
         """
-        super().__init__(n_cond, n_pred)
+        super().__init__(n_cond, n_pred, teacher_forcing_ratio=teacher_forcing_ratio)
         self.graph = tf.Graph()
         with self.graph.as_default():
-            self.is_train = tf.placeholder(tf.bool)
-
+            # self.is_train = tf.placeholder(tf.bool)
+            self.teacher_force = tf.placeholder(tf.bool)
 
             self.inputs = tf.placeholder(tf.float32, shape=(None, n_cond, input_dim))
             
@@ -181,7 +206,7 @@ class MixedSeq2Seq(BaseSeq2Seq):
             def looper(output, i):
                 return self.output_scale_factor * (tf.matmul(output, self.w_out) + self.b_out)
 
-            dec_outputs, dec_memory = tf.cond(self.is_train, lambda: rnn_decoder(self.dec_inp, enc_state, self.cell),
+            dec_outputs, dec_memory = tf.cond(self.teacher_force, lambda: rnn_decoder(self.dec_inp, enc_state, self.cell),
                                               lambda: rnn_decoder(self.dec_inp, enc_state, self.cell, loop_function=looper))
             # but without the "norm" part of batch normalization hehe. 
             self.reshaped_outputs = [self.output_scale_factor*(tf.matmul(i, self.w_out) + self.b_out) for i in dec_outputs]
@@ -190,9 +215,13 @@ class MixedSeq2Seq(BaseSeq2Seq):
             for _y, _Y in zip(self.reshaped_outputs, self.expected_sparse_output):
             #         output_loss += tf.reduce_mean(tf.nn.l2_loss(_y - _Y))
                 output_loss += tf.reduce_mean(tf.abs(_y - _Y)) # average loss across batch for single timestep
-            self.loss = output_loss / n_pred
+            self.loss = output_loss
 
-            self.optimizer = tf.train.AdamOptimizer(learning_rate)
+            if optimizer=='Adam':
+                self.optimizer = tf.train.AdamOptimizer(learning_rate)
+            elif optimizer=='RMSProp':
+                self.optimizer = tf.train.RMSPropOptimizer(learning_rate, decay=0.92, momentum=0.5)
+
             self.train_op = self.optimizer.minimize(self.loss)
 
             tf.summary.scalar('loss', self.loss)
@@ -208,8 +237,8 @@ class MixedSeq2Seq(BaseSeq2Seq):
             feed_dict[self.expected_sparse_output[i].name] = targs[:,i].reshape(-1,1)
         return feed_dict
 
-    def predict(self, inputs, targets):
-        feed_dict = {self.is_train: False, self.keep_prob: 1.0}
+    def predict(self, inputs, targets, one_step=False):
+        feed_dict = {self.teacher_force: one_step, self.keep_prob: 1.0}
         preds = self.sess.run(self.reshaped_outputs, feed_dict=self.feed_vals(inputs, targets, feed_dict))
         # a list with preds for each time step
         pred_array = np.ndarray((inputs.shape[0], self.n_pred))
@@ -223,16 +252,19 @@ class LegacySeq2Seq(BaseSeq2Seq):
     def __init__(self, n_cond, n_pred, hidden_dim,
                  n_layers=2,
                  input_dim=1,
-                 learning_rate=0.01,
+                 learning_rate=0.001,
                  output_dim=1,
-                 cell_type='GRU'):
+                 cell_type='GRU',
+                 optimizer='Adam',
+                 teacher_forcing_ratio=0.5):
         """
         Construct graph
         """
-        super().__init__(n_cond, n_pred)
+        super().__init__(n_cond, n_pred, teacher_forcing_ratio=teacher_forcing_ratio)
         self.graph = tf.Graph()
         with self.graph.as_default():
-            self.is_train = tf.placeholder(tf.bool)
+            # self.is_train = tf.placeholder(tf.bool)
+            self.teacher_force = tf.placeholder(tf.bool)
             # Encoder: inputs
             self.enc_inp = [
                 tf.placeholder(tf.float32, shape=(None, input_dim), name="inp_{}".format(t))
@@ -273,7 +305,7 @@ class LegacySeq2Seq(BaseSeq2Seq):
             def looper(output, i):
                 return self.output_scale_factor * (tf.matmul(output, self.w_out) + self.b_out)
 
-            dec_outputs, dec_memory = tf.cond(self.is_train, lambda: tied_rnn_seq2seq(self.enc_inp, self.dec_inp, self.cell),
+            dec_outputs, dec_memory = tf.cond(self.teacher_force, lambda: tied_rnn_seq2seq(self.enc_inp, self.dec_inp, self.cell),
                                               lambda: tied_rnn_seq2seq(self.enc_inp, self.dec_inp, self.cell, loop_function=looper))
             # but without the "norm" part of batch normalization hehe. 
             self.reshaped_outputs = [self.output_scale_factor*(tf.matmul(i, self.w_out) + self.b_out) for i in dec_outputs]
@@ -284,7 +316,11 @@ class LegacySeq2Seq(BaseSeq2Seq):
                 output_loss += tf.reduce_mean(tf.abs(_y - _Y)) # average loss across batch for single timestep
             self.loss = output_loss / n_pred
 
-            self.optimizer = tf.train.AdamOptimizer(learning_rate)
+            if optimizer=='Adam':
+                self.optimizer = tf.train.AdamOptimizer(learning_rate)
+            elif optimizer=='RMSProp':
+                self.optimizer = tf.train.RMSPropOptimizer(learning_rate, decay=0.92, momentum=0.5)
+
             self.train_op = self.optimizer.minimize(self.loss)
 
             tf.summary.scalar('loss', self.loss)
@@ -308,7 +344,7 @@ class LegacySeq2Seq(BaseSeq2Seq):
         pass
 
     def predict(self, inputs, targets):
-        feed_dict = {self.is_train: False, self.keep_prob: 1.0}
+        feed_dict = {self.teacher_force: False, self.keep_prob: 1.0}
         preds = self.sess.run(self.reshaped_outputs, feed_dict=self.feed_vals(inputs, targets, feed_dict))
         # a list with preds for each time step
         pred_array = np.ndarray((inputs.shape[0], self.n_pred))
@@ -321,10 +357,12 @@ class DynamicSeq2Seq(BaseSeq2Seq):
     def __init__(self, n_cond, n_pred, hidden_dim,
                  n_layers=2,
                  input_dim=1,
-                 learning_rate=0.01,
+                 learning_rate=0.001,
                  output_dim=1,
                  cell_type='GRU',
-                 batch_size=100):
+                 batch_size=100,
+                 optimizer='Adam',
+                 teacher_forcing_ratio=0.5):
         """
         Construct graph
         TrainingHelper just iterates over the dec_inputs passed to it
@@ -339,10 +377,10 @@ class DynamicSeq2Seq(BaseSeq2Seq):
 
 
         """
-        super().__init__(n_cond, n_pred)
+        super().__init__(n_cond, n_pred, teacher_forcing_ratio=teacher_forcing_ratio)
         self.graph = tf.Graph()
         with self.graph.as_default():
-            self.is_train = tf.placeholder(tf.bool)
+            self.teacher_force = tf.placeholder(tf.bool)
             cells = []
             self.keep_prob = tf.placeholder(tf.float32)
             for i in range(n_layers):
@@ -408,7 +446,7 @@ class DynamicSeq2Seq(BaseSeq2Seq):
                 initial_state=enc_state,
                 output_layer=output_layer)
             
-            outputs, states, sequence_lengths = tf.cond(self.is_train,
+            outputs, states, sequence_lengths = tf.cond(self.teacher_force,
                 lambda: tf.contrib.seq2seq.dynamic_decode(decoder=train_decoder),
                 lambda: tf.contrib.seq2seq.dynamic_decode(decoder=inf_decoder))
             # outputs, states, sequence_lengths = tf.contrib.seq2seq.dynamic_decode(decoder=train_decoder)
@@ -416,7 +454,11 @@ class DynamicSeq2Seq(BaseSeq2Seq):
         
             self.preds = outputs.rnn_output    
             self.loss = tf.reduce_mean(tf.abs(self.preds - self.targets))
-            self.optimizer = tf.train.AdamOptimizer(learning_rate)
+            if optimizer=='Adam':
+                self.optimizer = tf.train.AdamOptimizer(learning_rate)
+            elif optimizer=='RMSProp':
+                self.optimizer = tf.train.RMSPropOptimizer(learning_rate, decay=0.92, momentum=0.5)
+
             self.train_op = self.optimizer.minimize(self.loss)
 
             tf.summary.scalar('loss', self.loss)
@@ -432,6 +474,6 @@ class DynamicSeq2Seq(BaseSeq2Seq):
         return feed_dict
 
     def predict(self, inputs, targets, one_step=False):
-        feed_dict = {self.is_train: one_step, self.keep_prob: 1.0}
+        feed_dict = {self.teacher_force: one_step, self.keep_prob: 1.0}
         preds = self.sess.run(self.preds, feed_dict=self.feed_vals(inputs, targets, feed_dict))
         return preds
