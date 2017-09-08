@@ -49,13 +49,22 @@ class RNN(nn.Module):
         r_out, h_state = self.rnn(x, h_state)
         return self.out(r_out), h_state
 
-    def _predict_batch(self, sequence_batch, targets, pred_len):
+    def _predict_batch(self, batch, pred_len):
         output = []
-        x=Variable(sequence_batch[:,:,:-1], volatile=True).cuda()
-        e=Variable(sequence_batch[:,:,-1].long(), volatile=True).cuda()
+        series, timefts, seriesfts = batch[:3]
+        t_timefts, t_seriesfts = batch[4:]
+
+        series = Variable(series, volatile=True)
+        timefts = Variable(timefts, volatile=True)
+        t_timefts = Variable(t_timefts, volatile=True)
+
+        feats = torch.cat([series, timefts], dim=-1)
+        e=Variable(seriesfts, volatile=True)
         
         embed = self.embedding(e)
-        inp = torch.cat([x, embed], dim=2)
+        shape = (embed.size()[0],feats.size()[1],embed.size()[2])
+        embed = embed.expand(shape)
+        inp = torch.cat([feats, embed], dim=2)
 
         encoder_out, h_state = self(inp)
 
@@ -65,8 +74,7 @@ class RNN(nn.Module):
         iv = encoder_out[:,-1:,:]
         output.append(iv)
         for i in range(pred_len-1):
-            #We get the time dependent covariates from the 'targets'
-            time_dep = targets[:,i:i+1,1:-1]
+            time_dep = t_timefts[:,i:i+1,:]
             input_variable = torch.cat([iv, time_dep, embed_1], dim=2)
             encoder_out, h_state = self(input_variable, h_state)
             iv = encoder_out
@@ -86,17 +94,10 @@ class RNN(nn.Module):
                 np.array(target values)
         """
         all_output = []
-        all_targets = []
-        all_sequences = []
-        for sequences, t in dataloader:
-            pred_len = t.size()[1]
-            t = Variable(t, volatile=True).cuda()
-            output = self._predict_batch(sequences, t, pred_len)
+        for batch in valloader:
+            output = self._predict_batch(batch, pred_len)
             all_output.append(output)
-            all_targets.append(t[:,:,1])
-            all_sequences.append(sequences[:,:,1])
-        cat = lambda x: torch.cat(x, dim=0)
-        return cat(all_output), cat(all_targets), cat(all_sequences)
+        return torch.cat(all_output, dim=0)
 
     def validate(self, valloader):
         """Predict on a dataloader and return the average loss against the 
@@ -109,13 +110,14 @@ class RNN(nn.Module):
         """
         loss = 0
         steps = 0
-        for sequences, targets in valloader:
-            pred_len = targets.size()[1]
+        for batch in valloader:
+            t_series = batch[3]
+            pred_len = t_series.size()[1]
             #The flag volatile=True is essential to stop pytorch storing data 
             #for backprop and using all GPU memory
-            targets = Variable(targets, volatile=True).cuda()
-            output = self._predict_batch(sequences, targets, pred_len)
-            loss += self.loss_func(output, targets[:,:,:1])
+            t_series = Variable(t_series, volatile=True)
+            output = self._predict_batch(batch, pred_len)
+            loss += self.loss_func(output, t_series)
             steps+=1
         average_loss = loss.data[0]/steps
         return float(average_loss)
@@ -134,65 +136,69 @@ class RNN(nn.Module):
             save_best_path -- string if given, saves the best (val set) 
             performing model here
         """
-        #Setting batch size here to 1 since we'll just be using it to keep
-        #track of the size of the batch before
-        batch_size = 1 
         best_val_loss = np.inf
+        c = clock()
         for epoch in range(num_epochs):
-            with clock():
-                print('\nEPOCH %d' % (epoch+1))
-                running_total=0
-                step=0
-                for sequences, targets in trainloader: 
-                    #Restart the loader if the last batch is too small
-                    if batch_size and sequences.size(0)<batch_size:
-                        continue
-                    batch_size = sequences.size(0)
+            c.__enter__()
+            print('\nEPOCH %d' % (epoch+1))
+            running_total=0
+            step=0
+            for batch in trainloader: 
+                series, timefts, seriesfts = batch[:3]
+                t_series, t_timefts, t_seriesfts = batch[3:]
+                
+                loss = 0
 
-                    loss = 0
-    
-                    x=Variable(sequences[:,:,:-1]).cuda()
-                    e=Variable(sequences[:,:,-1].long()).cuda()
-                    y=Variable(targets).cuda()
+                series = Variable(series)
+                timefts = Variable(timefts)
+                t_timefts = Variable(t_timefts)
 
-                    embed = self.embedding(e)
-                    x = torch.cat([x, embed], dim=2)
+                x = torch.cat([series, timefts], dim=-1)
 
-                    #run through 'encoder' stage
-                    encoder_out, h_state = self(x)
+                e=Variable(seriesfts)
+                y=Variable(t_series)
 
-                    #Now 'decoder' stage
-                    rand = np.random.rand() 
-                    use_teacher_forcing =  rand < self.teacher_forcing_ratio
-                    #e is the same for all timesteps so we just pick the last
-                    #one
-                    embed_1 = embed[:,-1:,:]
-                    for i in range(y.size()[1]-1):
-                        #Get the time dependent features
-                        time_dep = y[:,i:i+1,1:-1]
-                        if use_teacher_forcing:
-                            iv = y[:,i:i+1,:1]
-                        else:
-                            iv = encoder_out[:,-1:,:]
-                        input_variable = torch.cat([iv,time_dep,embed_1], dim=2)
-                        encoder_out, h_state = self(input_variable, h_state)
-                        loss += self.loss_func(
-                            encoder_out, y[:,i+1:i+2,:1]
-                        )
+                embed = self.embedding(e)
+                shape = (embed.size()[0],x.size()[1],embed.size()[2])
+                embed = embed.expand(shape)
+                x = torch.cat([x, embed], dim=2)
 
-                    optimizer.zero_grad()                   
-                    loss.backward()
-                    running_total+=loss.data[0]
-                    if step>0 and step % 5 == 0:
-                        #Print running average of loss for thie epoch
-                        running_avg = running_total / (step*y.size()[1])
-                        print('Running average loss: %f' % running_avg,end='\r')
-                    optimizer.step()
-                    step += 1
-                print('')
-                if valloader is not None:
-                    average_loss = self.validate(valloader)
-                    print('VALIDATION LOSS: %f' % float(average_loss))
-                    if save_best_path is not None and average_loss<best_val_loss:
-                        best_val_loss = average_loss
-                        torch.save(self.state_dict(), save_best_path)
+                #run through 'encoder' stage
+                encoder_out, h_state = self(x)
+
+                #Now 'decoder' stage
+                rand = np.random.rand() 
+                use_teacher_forcing =  rand < self.teacher_forcing_ratio
+                #e is the same for all timesteps so we just pick the last
+                #one
+                embed_1 = embed[:,-1:,:]
+                for i in range(y.size()[1]-1):
+                    #Get the time dependent features
+                    time_dep = t_timefts[:,i:i+1,:]
+                    if use_teacher_forcing:
+                        iv = y[:,i:i+1,:]
+                    else:
+                        iv = encoder_out[:,-1:,:]
+                    input_variable = torch.cat([iv,time_dep,embed_1], dim=2)
+                    encoder_out, h_state = self(input_variable, h_state)
+                    loss += self.loss_func(
+                        encoder_out, y[:,i+1:i+2,:]
+                    )
+
+                optimizer.zero_grad()                   
+                loss.backward()
+                running_total+=loss.data[0]
+                if step>0 and step % 5 == 0:
+                    #Print running average of loss for thie epoch
+                    running_avg = running_total / (step*y.size()[1])
+                    print('Running average loss: %f' % running_avg,end='\r')
+                optimizer.step()
+                step += 1
+            print('')
+            if valloader is not None:
+                average_loss = self.validate(valloader)
+                print('VALIDATION LOSS: %f' % float(average_loss))
+                if save_best_path is not None and average_loss<best_val_loss:
+                    best_val_loss = average_loss
+                    torch.save(self.state_dict(), save_best_path)
+            c.__exit__(None,None,None)
