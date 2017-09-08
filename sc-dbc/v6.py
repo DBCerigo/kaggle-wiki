@@ -100,7 +100,7 @@ def process_page(page):
         with open(model_path, 'wb') as file:
             pk.dump(m,file)
         lg.info(base_log_info+'COMPUTE and STORE FINISHED')
-    train_smape = wiki.val.smape(forecast[forecast['train'] == 1].y, forecast[forecast['train'] == 0].yhat)
+    train_smape = wiki.val.smape(forecast[forecast['train'] == 1].y, forecast[forecast['train'] == 1].yhat)
     val_smape = wiki.val.smape(forecast[forecast['train'] == 0].y,forecast[forecast['train'] == 0].yhat)
     lg.info(base_log_info +'smape calc finished')
     return (page, train_smape, val_smape)
