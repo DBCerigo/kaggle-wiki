@@ -24,7 +24,7 @@ class RNN(nn.Module):
         """
         super().__init__()
 
-        self.embedding = torch.nn.Embedding(embedding_in, embedding_out)
+        self.embedding = torch.nn.Embedding(embedding_in, embedding_out).cuda()
 
         self.hidden_units = 128
         self.n_layers = 2
@@ -38,9 +38,9 @@ class RNN(nn.Module):
             num_layers=self.n_layers,
             batch_first=True,
             dropout=0.2
-        )
+        ).cuda()
         
-        self.out = nn.Linear(self.hidden_units, 1)
+        self.out = nn.Linear(self.hidden_units, 1).cuda()
 
         self.loss_func = nn.L1Loss() if loss_func is None else loss_func
         self.teacher_forcing_ratio = teacher_forcing_ratio
