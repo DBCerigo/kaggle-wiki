@@ -201,4 +201,4 @@ class RNN(nn.Module):
                     print('VALIDATION LOSS: %f' % float(average_loss))
                     if save_best_path is not None and average_loss<best_val_loss:
                         best_val_loss = average_loss
-                        torch.save(self, save_best_path)
+                        torch.save(self.state_dict(), save_best_path)

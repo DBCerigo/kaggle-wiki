@@ -1,7 +1,9 @@
 # coding: utf-8
 
+
 # NOTE: should be ran with `python3 vX.py 2>> some_log_file 1> /dev/null`, this capture the good stuff in the log
 # ...and dumps the shitty STAN stuff 
+
 
 import logging as lg
 lg.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=lg.INFO)
@@ -18,17 +20,17 @@ from wiki import utils
 import multiprocessing as mp
 from tqdm import tqdm
 
-# ## Version 5
+
+# ## Version 6 TEST
 # Should set version directory name in next cell. Should describe version specifics (outliers, holidays, validation period)
 
 #* TRAINING
-#    * Val indexing on -60
+#    * Train indexing on -30
+#    * Val indexing on -30 to None
 #    * Now with try:except:except: for the `RuntimeError': k initialized to invalid value (-nan)` which replaces first `y` with 0.001...
 #       * ...and for the `TypeError` which replaces first 10 `y` with 0 then first y with 0.001
-#    * log(x+1) on input
 #    
 #* PREDICTIONS
-#    * invslog(pred)-1 on preds
 #    * Truncating predictions at 0 
 #    * Rounding to nearest int
 
@@ -38,25 +40,23 @@ from tqdm import tqdm
 PROPHET_PATH = '../data/prophet/'
 RESULTS_PATH = 'results/'
 
+lg.info('Loading base pagedf and ds')
 pagedf = pd.read_feather(PROPHET_PATH+'pagedf.f')
 ds = pd.read_feather(PROPHET_PATH+'ds.f')
+lg.info('Finished loading base pagedf and ds')
 
 # should break if the dir already exists - avoids accidental overwriting
-VERSION = 'v5/'
+VERSION = 'v6t/'
 assert VERSION[-1] == '/'
-val_lims = (0,-60)
+train_lims = (0,-30)
+val_lim = None
 os.makedirs(PROPHET_PATH+VERSION)
-
-# make changepoints
-#changepoints = ds.iloc[val_lims[0]:val_lims[1]].ds[::22].values
-# can't do this because of the NaN outliers that match a changepoint throw error
 
 # # WARNING:
 # Turned off the chained assignment warning - when slicing dfs they can return copies sometimes instead,
 # which will mean your assignment wont be done on the actual base df.
 # Not sure why it's still compaining at me when I'm using .loc for assignations everywhere... shitty
 pd.options.mode.chained_assignment = None
-
 
 def process_page(page):
     base_log_info = '[Process:{0}, on page:{1}] '.format(mp.current_process().name, page)
@@ -70,11 +70,11 @@ def process_page(page):
         lg.info(base_log_info +'COMPUTE loop')
         df = ds.join(pagedf[page])
         df.columns = ['ds','y']
+        df = df.iloc[:val_lim]
         df['y_org'] = df.y
         # should also consider doing validation on the time period we are forecasting
-        traindf = df.iloc[val_lims[0]:val_lims[1]]
+        traindf = df.iloc[train_lims[0]:train_lims[1]]
         traindf['train'] = 1 # feather won't serialize bool so 1s and 0s...
-        traindf.loc[:,'y'] = np.log(traindf.y + 1) 
         try:
             m = Prophet(yearly_seasonality=True)
             m.fit(traindf)
@@ -89,9 +89,8 @@ def process_page(page):
             traindf.loc[0,'y'] = 0.001
             m = Prophet(yearly_seasonality=True)
             m.fit(traindf)
-        forecast = m.predict(ds)
+        forecast = m.predict(ds.iloc[:val_lim])
         forecast['yhat_org'] = forecast['yhat']
-        forecast.loc[:,'yhat'] = np.exp(forecast.yhat) - 1 
         forecast.loc[forecast['yhat'] < 0,['yhat']] = 0.0
         forecast.loc[:,'yhat'] = forecast.yhat.round(0).astype(int)
         forecast = forecast.join(df.y)
@@ -101,10 +100,10 @@ def process_page(page):
         with open(model_path, 'wb') as file:
             pk.dump(m,file)
         lg.info(base_log_info+'COMPUTE and STORE FINISHED')
-    full_smape = wiki.val.smape(forecast.y, forecast.yhat)
+    train_smape = wiki.val.smape(forecast[forecast['train'] == 1].y, forecast[forecast['train'] == 0].yhat)
     val_smape = wiki.val.smape(forecast[forecast['train'] == 0].y,forecast[forecast['train'] == 0].yhat)
     lg.info(base_log_info +'smape calc finished')
-    return (page, full_smape, val_smape)
+    return (page, train_smape, val_smape)
 
 def wrapper(pages):
     base_log_info = '[Process:{0}] '.format(mp.current_process().name)
@@ -115,6 +114,7 @@ def wrapper(pages):
     lg.info(base_log_info +'finished its pages loop')
     return val_results
 
+# testing
 
 total_proc = mp.cpu_count()
 # NOTE: shuffle the cols to that any pages that still need models built get distributied evenly
@@ -128,6 +128,6 @@ with utils.clock():
     lg.info('Finished pool map')
 lg.info('Val results recieved - processes ended')
 val_results = [item for sublist in val_results for item in sublist]
-val_results = pd.DataFrame(val_results, columns=['page_index',VERSION[:-1]+'_full',VERSION[:-1]+'_val'])
+val_results = pd.DataFrame(val_results, columns=['page_index',VERSION[:-1]+'_train',VERSION[:-1]+'_val'])
 val_results.to_feather(PROPHET_PATH+RESULTS_PATH+VERSION[:-1]+'df.f')
 lg.info('Script complete')
