@@ -1,6 +1,7 @@
 # ignore csvs and checkpoints
 hooker/*.csv
 hooker/checkpoints/*
+hooker/tf-log/*
 
 # ignore feather files and zips
 *.f
