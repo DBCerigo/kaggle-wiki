@@ -6,18 +6,19 @@ from .utils import clock
 
 
 def get_page_groups(train_df):
-	pages_dict = {}
-	ids = []
-	for page in train_df.Page:
-		w = 'wikipedia.org'
-		x = page.find(w)
-		name = page[:x+len(w)]
-		if name in pages_dict:
-			ids.append(pages_dict[name])
-		else:
-			idnum = len(pages_dict)
-			ids.append(idnum)
-			pages_dict[name] = idnum
+    pages_dict = {}
+    ids = []
+    for page in train_df.Page:
+        w = 'wikipedia.org'
+        x = page.find(w)
+        name = page[:x+len(w)]
+        if name in pages_dict:
+            ids.append(pages_dict[name])
+        else:
+            idnum = len(pages_dict)
+            ids.append(idnum)
+            pages_dict[name] = idnum
+    return ids
 
 class RNN(nn.Module):
     """Class to represent the RNN model with meta features."""
