@@ -164,7 +164,6 @@ class RNN(nn.Module):
                     #Now 'decoder' stage
                     rand = np.random.rand() 
                     use_teacher_forcing =  rand < self.teacher_forcing_ratio
-                    use_teacher_forcing = False
                     #e is the same for all timesteps so we just pick the last
                     #one
                     embed_1 = embed[:,-1:,:]
