@@ -17,12 +17,16 @@ from datasets import generate_x_y_data_v3
 
 class BaseSeq2Seq:
 
-    def __init__(self, n_cond, n_pred, teacher_forcing_ratio=0.5):
+    def __init__(self, n_cond, n_pred,
+                 teacher_forcing_ratio=0.5,
+                 use_scheduled_sampling=False):
         self.n_cond = n_cond
         self.n_pred = n_pred
         self.teacher_forcing_ratio = teacher_forcing_ratio
+        self.use_scheduled_sampling = use_scheduled_sampling
 
-    def train_sine(self, epochs=100, report_error_avg=10, batch_size=100, logdir='tf-log/fourier/'):
+    def train_sine(self, epochs=100, report_error_avg=10, batch_size=100, logdir='tf-log/fourier/',
+                   min_gt_prob=0., init_gt_prob=1.0, decrease_per_batch=0.0005):
         # input_batch, target_batch = val_data.next()
         self.sess = tf.Session(graph=self.graph)
         self.sess.run(self.init)
@@ -40,7 +44,12 @@ class BaseSeq2Seq:
                     input_batch = input_batch.reshape(input_batch.shape[0],-1).T
                     target_batch = target_batch.reshape(target_batch.shape[0],-1).T
                     #     print(input_batch.shape, target_batch.shape)
-                    feed_dict = {self.teacher_force: np.random.random_sample()<self.teacher_forcing_ratio, self.keep_prob: 1.0}
+                    if self.use_scheduled_sampling:
+                        batch_no = e*report_error_avg + i
+                        use_ground_truth_prob = max(min_gt_prob, init_gt_prob - decrease_per_batch*batch_no)
+                        feed_dict = {self.teacher_force: True, self.keep_prob: 1.0, self.sampling_probability: 1-use_ground_truth_prob}
+                    else:
+                        feed_dict = {self.teacher_force: np.random.random_sample()<self.teacher_forcing_ratio, self.keep_prob: 1.0}
                     # each decoder input is batch size x 1
                     feed_dict = self.feed_vals(input_batch, target_batch, feed_dict)
                     _, err, summary = self.sess.run([self.train_op, self.loss, self.summary_op], feed_dict=feed_dict)
@@ -68,7 +77,8 @@ class BaseSeq2Seq:
             
             print("""End of epoch {0}: running error average = {1:.3f}
                      mean error average = {2:.3f}
-                     val error average = {3:.3f}""".format(e + 1, running_error, mean_running_error, val_error))
+                     val error average = {3:.3f}
+                     use ground truth prob = {4}""".format(e + 1, running_error, mean_running_error, val_error, use_ground_truth_prob))
 
 
     def train(self,
@@ -405,6 +415,8 @@ class DynamicSeq2Seq(BaseSeq2Seq):
             # with constant lengths we still need to specify the lengths for traininghelper, but n.b. they're all the same
             sequence_lengths = tf.constant(n_pred, shape=(batch_size,))
 
+            output_layer = Dense(1, activation=None)
+
             train_helper = tf.contrib.seq2seq.TrainingHelper(dec_input, sequence_lengths)
 
             def sampler(time, outputs, state):
@@ -432,7 +444,139 @@ class DynamicSeq2Seq(BaseSeq2Seq):
             # next_inputs_fn - see note on looper
             #https://github.com/tensorflow/tensorflow/issues/11540
 
+            train_decoder = tf.contrib.seq2seq.BasicDecoder(
+                cell=cell,
+                helper=train_helper,
+                initial_state=enc_state,
+                output_layer=output_layer)
+
+            inf_decoder = tf.contrib.seq2seq.BasicDecoder(
+                cell=cell,
+                helper=inf_helper,
+                initial_state=enc_state,
+                output_layer=output_layer)
+            
+            outputs, states, sequence_lengths = tf.cond(self.teacher_force,
+                lambda: tf.contrib.seq2seq.dynamic_decode(decoder=train_decoder),
+                lambda: tf.contrib.seq2seq.dynamic_decode(decoder=inf_decoder))
+            # outputs, states, sequence_lengths = tf.contrib.seq2seq.dynamic_decode(decoder=train_decoder)
+            # here outputs is an instance of class BasicDecoderOutput, with attrs rnn_output, sample_ids
+        
+            self.preds = outputs.rnn_output    
+            self.loss = tf.reduce_mean(tf.abs(self.preds - self.targets))
+            if optimizer=='Adam':
+                self.optimizer = tf.train.AdamOptimizer(learning_rate)
+            elif optimizer=='RMSProp':
+                self.optimizer = tf.train.RMSPropOptimizer(learning_rate, decay=0.92, momentum=0.5)
+
+            self.train_op = self.optimizer.minimize(self.loss)
+
+            tf.summary.scalar('loss', self.loss)
+
+            self.summary_op = tf.summary.merge_all()
+            self.saver = tf.train.Saver()
+            self.init = tf.global_variables_initializer()
+
+    def feed_vals(self, inps, targs, feed_dict):
+        feed_dict[self.inputs] = np.pad(inps, ((0,0),(1,0)), mode='constant')[:,:-1].reshape(inps.shape[0], inps.shape[1], 1)
+        feed_dict[self.go_sym] = inps[:,-1].reshape(-1,1,1)
+        feed_dict[self.targets] = targs.reshape(targs.shape[0], targs.shape[1], 1)
+        return feed_dict
+
+    def predict(self, inputs, targets, one_step=False):
+        feed_dict = {self.teacher_force: one_step, self.keep_prob: 1.0}
+        preds = self.sess.run(self.preds, feed_dict=self.feed_vals(inputs, targets, feed_dict))
+        return preds
+
+class ScheduledSamplingSeq2Seq(BaseSeq2Seq):
+
+    def __init__(self, n_cond, n_pred, hidden_dim,
+                 n_layers=2,
+                 input_dim=1,
+                 learning_rate=0.001,
+                 output_dim=1,
+                 cell_type='GRU',
+                 batch_size=100,
+                 optimizer='Adam',
+                 teacher_forcing_ratio=0.5,
+                 use_scheduled_sampling=True):
+        """
+        Construct graph
+        TrainingHelper just iterates over the dec_inputs passed to it
+        But in general a helper will take sample ids passed by basic decoder and used these to pick inputs
+        BasicDecoder just implements a step function which produces outputs and sample ids at each step
+            the outputs are the result of applying the rnn cell followed by an optional output layer
+
+        what I need is a version of GreedyEmbeddingHelper,
+            (A helper for use during inference.
+             Uses the argmax of the output (treated as logits) and passes the
+             result through an embedding layer to get the next input.)
+
+
+        """
+        super().__init__(n_cond, n_pred, teacher_forcing_ratio=teacher_forcing_ratio,
+                         use_scheduled_sampling=use_scheduled_sampling)
+        self.graph = tf.Graph()
+        with self.graph.as_default():
+            if use_scheduled_sampling:
+                self.sampling_probability = tf.placeholder(tf.float32, shape=()) # the probability of sampling from the outputs instead of reading directly from the inputs
+            self.teacher_force = tf.placeholder(tf.bool)
+            cells = []
+            self.keep_prob = tf.placeholder(tf.float32)
+            for i in range(n_layers):
+                with tf.variable_scope('RNN_{}'.format(i)):
+                    if cell_type=='GRU':
+                        cells.append(DropoutWrapper(tf.nn.rnn_cell.GRUCell(hidden_dim), output_keep_prob=self.keep_prob))
+                    elif cell_type=='LSTM':
+                        cells.append(DropoutWrapper(tf.nn.rnn_cell.BasicLSTMCell(hidden_dim), output_keep_prob=self.keep_prob))
+                    # cells.append(tf.nn.rnn_cell.BasicLSTMCell(...))
+            cell = tf.nn.rnn_cell.MultiRNNCell(cells)
+            
+            self.inputs = tf.placeholder(tf.float32, shape=(None, n_cond, input_dim))
+            self.go_sym = tf.placeholder(tf.float32, shape=(None, 1, input_dim))
+            self.targets = tf.placeholder(tf.float32, shape=(None, n_pred, input_dim))
+            
+            
+            dec_input = tf.concat([self.go_sym, self.targets[:,:-1,:]], 1)
+            enc_outputs, enc_state = tf.nn.dynamic_rnn(cell, self.inputs, dtype=tf.float32) # returns outputs, state
+            
+            # one of the features of the dynamic seq2seq is that it can handle variable length sequences
+            # but to do this you need to pad them to equal length then specify the lengths separately
+            # with constant lengths we still need to specify the lengths for traininghelper, but n.b. they're all the same
+            sequence_lengths = tf.constant(n_pred, shape=(batch_size,))
+
             output_layer = Dense(1, activation=None)
+
+            # if not use_scheduled_sampling:
+            #     train_helper = tf.contrib.seq2seq.TrainingHelper(dec_input, sequence_lengths)
+            # else:
+            train_helper = tf.contrib.seq2seq.ScheduledOutputTrainingHelper(dec_input, sequence_lengths, self.sampling_probability, 
+                                                                            next_input_layer=Dense(1, activation=None))
+
+            def sampler(time, outputs, state):
+                # this isn't necessary, but just do it to get the types right
+                sample_ids = math_ops.cast(
+                  math_ops.argmax(outputs, axis=-1), tf.int32)
+                return sample_ids
+
+            def looper(time, outputs, state, sample_ids):
+                 # next_inputs_fn: callable that takes `(time, outputs, state, sample_ids)`
+                 # and emits `(finished, next_inputs, next_state)`.
+                next_time = time + 1
+                finished = next_time >= sequence_lengths
+                next_inputs = tf.reshape(outputs, (batch_size, input_dim)) # collapse the time axis
+                # I think this is the right thing to do based on looking at the shape of the outputs of TrainingHelper.initialize
+                return (finished, outputs, state)
+
+            inf_helper = tf.contrib.seq2seq.CustomHelper(lambda: (array_ops.tile([False], [batch_size]), tf.reshape(self.go_sym, (batch_size, input_dim))) ,
+                                                         sampler,
+                                                         looper) # initialize fn, sample fn, next_inputs fn
+
+            # initialize_fn: callable that returns `(finished, next_inputs)`
+            # for the first iteration.
+            # sample_fn: callable that takes `(time, outputs, state)`
+            # next_inputs_fn - see note on looper
+            #https://github.com/tensorflow/tensorflow/issues/11540
 
             train_decoder = tf.contrib.seq2seq.BasicDecoder(
                 cell=cell,
