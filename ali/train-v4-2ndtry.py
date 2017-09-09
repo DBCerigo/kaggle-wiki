@@ -220,16 +220,10 @@ valgen = test_datagen(values, timedep, seriesdep, 62, batch_size)
 # In[30]:
 
 
-model = rnn_windowed.RNN()
 
 
 # In[33]:
 
-
-optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-save_best_path = base_dir+'rnn_stage2_v4_lr1_weights.mdl'
-with clock():
-    model.fit(traingen, valgen, optimizer=optimizer, num_epochs=25, save_best_path=save_best_path)
 
 
 # In[ ]:
