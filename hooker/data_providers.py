@@ -139,7 +139,7 @@ class MultiTSDataProvider(DataProvider):
             self.sampled_rows = np.random.choice(full_scaled_inputs.shape[0], n_ts, replace=False)
             selected_inputs = full_scaled_inputs[self.sampled_rows, :]
         if which_set == 'train':
-            inputs = selected_inputs[:,:-(n_pred+n_cond)]
+            inputs = selected_inputs[:,:-n_pred]
         elif which_set == 'val':
             inputs = selected_inputs[:,-(n_pred+n_cond):]
           # each ts should have 0 mean and unit variance
@@ -157,10 +157,12 @@ class MultiTSDataProvider(DataProvider):
                 for i in range(n_windows):
                     window_array[:,i,:] = inputs[:, start_index:start_index+window_length]
                     start_index += stride_length
+                print(window_array.shape)
                 inputs = window_array.reshape((-1,window_length))
+                print(inputs.shape)
                 print('{} overlapping windows of length {} in training date range'.format(n_windows, window_length))
-                inputs = window_array[:,:n_cond]
-                targets = window_array[:,n_cond:]
+                targets = inputs[:,n_cond:]
+                inputs = inputs[:,:n_cond]
             elif stride_length == -1:
                 targets = inputs[:,-n_pred:]
                 inputs = inputs[:,-(n_cond+n_pred):-n_pred]
