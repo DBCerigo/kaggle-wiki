@@ -31,10 +31,13 @@ from wiki import rnn, rnn_predict, newphet, val, submissions, rnn_windowed
 
 # In[3]:
 
+embedding_out = int(sys.argv[1])
+embed_id = str(embedding_out)
+print("Embedding dim: %d" % embedding_out)
 
 base_dir = '../data/'
 pred_len = 62
-batch_size = 1024
+batch_size = 4096
 
 
 # In[4]:
@@ -47,6 +50,8 @@ train_df = pd.read_csv(base_dir+'train_2.csv').fillna(0)
 
 
 page_groups = rnn_windowed.get_page_groups(train_df)
+embedding_in = len(set(page_groups))
+print("Embedding in dimension: %d" % embedding_in)
 
 
 # In[6]:
@@ -225,14 +230,14 @@ valgen = test_datagen(values, timedep, seriesdep, 120, 62, batch_size)
 # In[ ]:
 
 
-model = rnn_windowed.RNN()
+model = rnn_windowed.RNN(embedding_in=embedding_in,embedding_out=embedding_out).cuda()
 
 
 # In[ ]:
 
 
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-save_best_path = base_dir+'rnn_stage2_v4.5_lr1_weights.mdl'
+save_best_path = base_dir+'rnn_stage2_v4.5_lr1_embed_'+embed_id+'_weights.mdl'
 with clock():
     model.fit(traingen, valgen, optimizer=optimizer, num_epochs=25, save_best_path=save_best_path)
 
@@ -240,8 +245,8 @@ with clock():
 # In[ ]:
 
 
-save_best_path = base_dir+'rnn_stage2_v4.5_lr1_weights.mdl'
-model = rnn_windowed.RNN().cuda()
+save_best_path = base_dir+'rnn_stage2_v4.5_lr1_embed_'+embed_id+'_weights.mdl'
+model = rnn_windowed.RNN(embedding_in=embedding_in,embedding_out=embedding_out).cuda()
 model.load_state_dict(torch.load(save_best_path))
 
 
@@ -249,7 +254,7 @@ model.load_state_dict(torch.load(save_best_path))
 
 
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
-save_best_path = base_dir+'rnn_stage2_v4.5_lr2_weights.mdl'
+save_best_path = base_dir+'rnn_stage2_v4.5_lr2_embed_'+embed_id+'_weights.mdl'
 with clock():
     model.fit(trainloader, valloader, optimizer=optimizer, num_epochs=20, save_best_path=save_best_path)
 
@@ -257,8 +262,8 @@ with clock():
 # In[ ]:
 
 
-save_best_path = base_dir+'rnn_stage2_v4.5_lr2_weights.mdl'
-model = rnn_windowed.RNN().cuda()
+save_best_path = base_dir+'rnn_stage2_v4.5_lr2_embed_'+embed_id+'_weights.mdl'
+model = rnn_windowed.RNN(embedding_in=embedding_in,embedding_out=embedding_out).cuda()
 model.load_state_dict(torch.load(save_best_path))
 
 
@@ -305,5 +310,5 @@ np.nanmean(smapes), np.nanmean(smapes_clipped)
 # In[ ]:
 
 
-np.save(base_dir+'rnn_v4.5_predictions.npy', predictions)
+np.save(base_dir+'rnn_v4.5_embed_'+embed_id+'_predictions.npy', predictions)
 
