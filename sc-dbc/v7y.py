@@ -46,10 +46,12 @@ ds = pd.read_feather(PROPHET_PATH+'ds.f')
 lg.info('Finished loading base pagedf and ds')
 
 # should break if the dir already exists - avoids accidental overwriting
-VERSION = 'v7/'
+VERSION = 'v7y/'
 assert VERSION[-1] == '/'
-train_lims = (0,-120)
-val_lim = -60
+upper_lim = -120 # data beyond here considered future
+val_lims = utils.prevYear_shift((-120,-60))
+#train_lims = (0,-120)
+#val_lim = -60
 os.makedirs(PROPHET_PATH+VERSION)
 
 # # WARNING:
@@ -71,9 +73,14 @@ def process_page(page):
         df = ds.join(pagedf[page])
         df.columns = ['ds','y']
         df['y_org'] = df.y
-        # should also consider doing validation on the time period we are forecasting
-        traindf = df.iloc[train_lims[0]:train_lims[1]]
-        traindf['train'] = 1 # feather won't serialize bool so 1s and 0s...
+        # doing validation on year previous time period, so set to NaN
+        df.y.iloc[val_lims[0]:val_lims[1]] = np.nan
+        df['train'] = 1 # feather won't serialize bool so 1s and 0s...
+        df.train.iloc[val_lims[0]:val_lims[1]] = 0 # set labels to test
+        # check
+        assert df.iloc[val_lims[0]:val_lims[1]].y.count() == 0
+        assert df.iloc[val_lims[0]:val_lims[1]].train.sum() == 0
+        traindf = df.iloc[:upper_lim]
         try:
             m = Prophet(yearly_seasonality=True)
             m.fit(traindf)
@@ -88,14 +95,14 @@ def process_page(page):
             traindf.loc[0,'y'] = 0.001
             m = Prophet(yearly_seasonality=True)
             m.fit(traindf)
-        forecast = m.predict(ds.iloc[:val_lim])
+        forecast = m.predict(ds.iloc[:upper_lim])
         forecast['yhat_org'] = forecast['yhat']
         forecast.loc[forecast['yhat'] < 0,['yhat']] = 0.0
         forecast.loc[:,'yhat'] = forecast.yhat.round(0).astype(int)
-        df = df.iloc[:val_lim]
+        df = df.iloc[:upper_lim]
         forecast = forecast.join(df.y)
         forecast = forecast.join(df.y_org)
-        forecast = forecast.join(traindf.loc[:,['train']]).fillna({'train':0}) # 0 bools
+        forecast = forecast.join(df.train)
         forecast.to_feather(df_path)
         with open(model_path, 'wb') as file:
             pk.dump(m,file)
