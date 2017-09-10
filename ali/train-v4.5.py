@@ -256,7 +256,7 @@ model.load_state_dict(torch.load(save_best_path))
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
 save_best_path = base_dir+'rnn_stage2_v4.5_lr2_embed_'+embed_id+'_weights.mdl'
 with clock():
-    model.fit(trainloader, valloader, optimizer=optimizer, num_epochs=20, save_best_path=save_best_path)
+    model.fit(traingen, valgen, optimizer=optimizer, num_epochs=20, save_best_path=save_best_path)
 
 
 # In[ ]:
