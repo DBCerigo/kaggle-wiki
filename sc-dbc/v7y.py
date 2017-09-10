@@ -21,7 +21,7 @@ import multiprocessing as mp
 from tqdm import tqdm
 
 
-# ## Version 7
+# ## Version 7 year before
 # Should set version directory name in next cell. Should describe version specifics (outliers, holidays, validation period)
 
 #* TRAINING
@@ -52,7 +52,7 @@ upper_lim = -120 # data beyond here considered future
 val_lims = utils.prevYear_shift((-120,-60))
 #train_lims = (0,-120)
 #val_lim = -60
-os.makedirs(PROPHET_PATH+VERSION)
+#os.makedirs(PROPHET_PATH+VERSION)
 
 # # WARNING:
 # Turned off the chained assignment warning - when slicing dfs they can return copies sometimes instead,
