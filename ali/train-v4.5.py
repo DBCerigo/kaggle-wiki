@@ -1,10 +1,15 @@
 
 # coding: utf-8
 
-# # v4
+# # v4+
 # we basically need a different batch generator. Will first look at what Hooker's got and see if it's worth stealing - an extra thing to think about is to think properly how to deal with the time-dependent and -independent covariates and how best to provide them (particularly for the prediction stage when the dates are 'in the future')
+# 
+# ## v4
+# 62 lookback, 62 predict
+# ## v4.1
+# 120 lookback, 62 predict
 
-# In[44]:
+# In[2]:
 
 
 import sys
@@ -24,39 +29,44 @@ from wiki.utils import clock
 from wiki import rnn, rnn_predict, newphet, val, submissions, rnn_windowed
 
 
-# In[19]:
+# In[3]:
 
+embedding_out = int(sys.argv[1])
+embed_id = str(embedding_out)
+print("Embedding dim: %d" % embedding_out)
 
 base_dir = '../data/'
 pred_len = 62
-batch_size = 1024
+batch_size = 4096
 
 
-# In[9]:
+# In[4]:
 
 
 train_df = pd.read_csv(base_dir+'train_2.csv').fillna(0)
 
 
-# In[45]:
+# In[5]:
 
 
 page_groups = rnn_windowed.get_page_groups(train_df)
+embedding_in = len(set(page_groups))
+print("Embedding in dimension: %d" % embedding_in)
 
 
-# In[46]:
+# In[6]:
 
 
 np.array(page_groups).shape
 
 
-# In[47]:
+# In[7]:
 
 
 values = train_df.drop('Page', axis=1).values ; values.shape
 
 
-# In[48]:
+# In[8]:
 
 
 dates = train_df.columns[1:].values
@@ -64,13 +74,13 @@ s_date = dates[0]
 e_date = dates[-1]
 
 
-# In[49]:
+# In[9]:
 
 
 dates = pd.date_range(s_date, e_date)
 
 
-# In[50]:
+# In[10]:
 
 
 ages = np.arange(len(dates))
@@ -78,7 +88,7 @@ dows = dates.dayofweek.values
 woys = dates.weekofyear.values
 
 
-# In[51]:
+# In[11]:
 
 
 #Expand the dims to make broadcasting work - since numpy
@@ -87,25 +97,25 @@ series_idxs = np.arange(values.shape[0])
 #series_idxs = series_idxs.reshape((series_idxs.shape+(1,1)))
 
 
-# In[52]:
+# In[12]:
 
 
 series_idxs.shape
 
 
-# In[15]:
+# In[13]:
 
 
 timedep = np.stack([ages, dows, woys], axis=-1)
 
 
-# In[16]:
+# In[14]:
 
 
 seriesdep = np.array(page_groups)
 
 
-# In[17]:
+# In[15]:
 
 
 values, scaler = rnn.scale_values(values)
@@ -124,7 +134,7 @@ class test_datagen(object):
     def __iter__(self):
         return self.gen(*self.args)
     
-    def gen(self, timeseries, timedep, seriesdep, predlen, batch_size):
+    def gen(self, timeseries, timedep, seriesdep, window_size, predlen, batch_size):
         """"timeseries: (total, series_length, 1)
         timedep: (series_length, num_feats)
         seriesdep: (total)
@@ -136,9 +146,9 @@ class test_datagen(object):
             target_timedep: (batch_size, window_size, num_feats),
             target_seriesdep: (batch_size, 1)
         """
-        train_series = timeseries[:,:-predlen,:]
+        train_series = timeseries[:,-predlen-window_size:-predlen,:]
         target_series = timeseries[:,-predlen:,:]
-        train_timedep = timedep[:-predlen,:]
+        train_timedep = timedep[-predlen-window_size:-predlen,:]
         target_timedep = timedep[-predlen:,:]
         seriesdep = np.expand_dims(seriesdep, axis=-1)
         i=0
@@ -158,7 +168,7 @@ class test_datagen(object):
             i += batch_size
 
 
-# In[20]:
+# In[19]:
 
 
 #THROWS AWAY LAST EXAMPLES!!! it will break if number of examples is divisible by batch size
@@ -170,7 +180,7 @@ class train_datagen(object):
     def __iter__(self):
         return self.gen(*self.args)
     
-    def gen(self, timeseries, timedep, seriesdep, window_size, window_space, num_per_series, batch_size):
+    def gen(self, timeseries, timedep, seriesdep, window_size, predlen, window_space, num_per_series, batch_size):
         """"timeseries: (total, series_length, 1)
         timedep: (series_length, num_feats)
         seriesdep: (total)
@@ -187,14 +197,14 @@ class train_datagen(object):
         for series, seriesdep in zip(timeseries, seriesdep):
             #for k in range(num_per_series):
             for k in range(num_per_series):
-                train_series.append(series[-2*window_size-k*window_space:-window_size-k*window_space, :])
+                train_series.append(series[-predlen-window_size-k*window_space:-predlen-k*window_space, :])
                 if k != 0:
-                    target_series.append(series[-window_size-k*window_space:-k*window_space, :])
-                    target_timedep.append(timedep[-window_size-k*window_space:-k*window_space, :])
+                    target_series.append(series[-predlen-k*window_space:-k*window_space, :])
+                    target_timedep.append(timedep[-predlen-k*window_space:-k*window_space, :])
                 else:
-                    target_series.append(series[-window_size-k*window_space:, :])
-                    target_timedep.append(timedep[-window_size-k*window_space:, :])
-                train_timedep.append(timedep[-2*window_size-k*window_space:-window_size-k*window_space, :])
+                    target_series.append(series[-predlen:, :])
+                    target_timedep.append(timedep[-predlen:, :])
+                train_timedep.append(timedep[-predlen-window_size-k*window_space:-predlen-k*window_space, :])
                 train_seriesdep.append(np.expand_dims(seriesdep, axis=-1))
                 if len(train_series) == batch_size:
                     conv = lambda x: torch.from_numpy(np.stack(x))
@@ -210,24 +220,24 @@ class train_datagen(object):
                     train_timedep, target_timedep = [],[]
 
 
-# In[21]:
+# In[20]:
 
 
-traingen = train_datagen(values, timedep, seriesdep, 62, 10, 10, batch_size)
-valgen = test_datagen(values, timedep, seriesdep, 62, batch_size)
+traingen = train_datagen(values, timedep, seriesdep, 120, 62, 10, 10, batch_size)
+valgen = test_datagen(values, timedep, seriesdep, 120, 62, batch_size)
 
 
-# In[30]:
+# In[ ]:
 
 
-model = rnn_windowed.RNN()
+model = rnn_windowed.RNN(embedding_in=embedding_in,embedding_out=embedding_out).cuda()
 
 
-# In[33]:
+# In[ ]:
 
 
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-save_best_path = base_dir+'rnn_stage2_v4_lr1_weights.mdl'
+save_best_path = base_dir+'rnn_stage2_v4.5_lr1_embed_'+embed_id+'_weights.mdl'
 with clock():
     model.fit(traingen, valgen, optimizer=optimizer, num_epochs=25, save_best_path=save_best_path)
 
@@ -235,8 +245,8 @@ with clock():
 # In[ ]:
 
 
-save_best_path = base_dir+'rnn_stage2_v4_lr1_weights.mdl'
-model = rnn_windowed.RNN().cuda()
+save_best_path = base_dir+'rnn_stage2_v4.5_lr1_embed_'+embed_id+'_weights.mdl'
+model = rnn_windowed.RNN(embedding_in=embedding_in,embedding_out=embedding_out).cuda()
 model.load_state_dict(torch.load(save_best_path))
 
 
@@ -244,16 +254,16 @@ model.load_state_dict(torch.load(save_best_path))
 
 
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
-save_best_path = base_dir+'rnn_stage2_v4_lr2_weights.mdl'
+save_best_path = base_dir+'rnn_stage2_v4.5_lr2_embed_'+embed_id+'_weights.mdl'
 with clock():
-    model.fit(traingen, valgen, optimizer=optimizer, num_epochs=20, save_best_path=save_best_path)
+    model.fit(trainloader, valloader, optimizer=optimizer, num_epochs=20, save_best_path=save_best_path)
 
 
 # In[ ]:
 
 
-save_best_path = base_dir+'rnn_stage2_v4_lr2_weights.mdl'
-model = rnn_windowed.RNN().cuda()
+save_best_path = base_dir+'rnn_stage2_v4.5_lr2_embed_'+embed_id+'_weights.mdl'
+model = rnn_windowed.RNN(embedding_in=embedding_in,embedding_out=embedding_out).cuda()
 model.load_state_dict(torch.load(save_best_path))
 
 
@@ -300,5 +310,5 @@ np.nanmean(smapes), np.nanmean(smapes_clipped)
 # In[ ]:
 
 
-np.save(base_dir+'rnn_v3_predictions.npy', outputs)
+np.save(base_dir+'rnn_v4.5_embed_'+embed_id+'_predictions.npy', predictions)
 
