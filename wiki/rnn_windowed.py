@@ -53,7 +53,7 @@ class RNN(nn.Module):
             hidden_size = self.hidden_units,
             num_layers=self.n_layers,
             batch_first=True,
-            dropout=0.2
+            dropout=0
         ).cuda()
         
         self.out = nn.Linear(self.hidden_units, 1).cuda()
