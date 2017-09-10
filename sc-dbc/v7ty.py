@@ -1,6 +1,5 @@
 # coding: utf-8
 
-
 # NOTE: should be ran with `python3 vX.py 2>> some_log_file 1> /dev/null`, this capture the good stuff in the log
 # ...and dumps the shitty STAN stuff 
 
@@ -19,6 +18,7 @@ import wiki
 from wiki import utils 
 import multiprocessing as mp
 from tqdm import tqdm
+lg.info('Import done')
 
 
 # ## Version 7 TEST year before
@@ -52,7 +52,7 @@ upper_lim = -60 # data beyond here considered future
 val_lims = utils.prevYear_shift((-60,None))
 #train_lims = (0,-120)
 #val_lim = -60
-os.makedirs(PROPHET_PATH+VERSION)
+#os.makedirs(PROPHET_PATH+VERSION)
 
 # # WARNING:
 # Turned off the chained assignment warning - when slicing dfs they can return copies sometimes instead,
