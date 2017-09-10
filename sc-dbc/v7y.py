@@ -21,7 +21,7 @@ import multiprocessing as mp
 from tqdm import tqdm
 
 
-# ## Version 7
+# ## Version 7 year before
 # Should set version directory name in next cell. Should describe version specifics (outliers, holidays, validation period)
 
 #* TRAINING
