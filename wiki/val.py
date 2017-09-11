@@ -37,7 +37,7 @@ def get_yhat_rolling_smape(train, yhat):
     yhat_rolling_smape = yhat_rolling_smape.shift(-59, axis=1)
     assert yhat_rolling_smape.max().max() <= 200
     assert yhat_rolling_smape.min().min() >= 0
-    print('(df.smape_60_to_0.fillna(-1) == median_rolling_smape.iloc[:,-60].fillna(-1)).sum() -> 145063')
+    print('(df.v7t_val.round(decimals=6).fillna(-10) == yhat_rolling_smape.iloc[:,-60].round(decimals=6).fillna(-10)).sum() -> 145063')
     return yhat_rolling_smape
 
 def load_prophet_rolling_smape(VERSION, prop, force_remake=False, test=None):
@@ -74,6 +74,6 @@ def load_prophet_rolling_smape(VERSION, prop, force_remake=False, test=None):
     
 
 def load_median_rolling_smape():
-    print('(df.v7t_val.round(decimals=6).fillna(-10) == yhat_rolling_smape.iloc[:,-60].round(decimals=6).fillna(-10)).sum() -> 145063')
+    print('(df.smape_60_to_0.fillna(-1) == median_rolling_smape.iloc[:,-60].fillna(-1)).sum() -> 145063')
     return pd.read_feather('../data/median_rolling_smape.f')
 
