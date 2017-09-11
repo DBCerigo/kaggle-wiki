@@ -37,18 +37,17 @@ def get_yhat_rolling_smape(train, yhat):
     yhat_rolling_smape = yhat_rolling_smape.shift(-59, axis=1)
     assert yhat_rolling_smape.max().max() <= 200
     assert yhat_rolling_smape.min().min() >= 0
-    print('(df.v7t_val.round(decimals=6).fillna(-10) == yhat_rolling_smape.iloc[:,-60].round(decimals=6).fillna(-10)).sum() -> 145063')
     return yhat_rolling_smape
 
-def load_prophet_rolling_smape(VERSION, prop, force_remake=False, test=None):
+def load_prophet_rolling_smape(VERSION, prop='yhat', force_remake=False, test=None):
     PROPHET_PATH = '../data/prophet/'
     CACHE_PATH = 'cache/'
     assert VERSION[-1] == '/'
-    rolling_path = PROPHET_PATH+CACHE_PATH+VERSION[:-1]+'rolling'+'.f'
+    rolling_path = PROPHET_PATH+CACHE_PATH+VERSION[:-1]+'rolling_'+prop+'.f'
     if os.path.isfile(rolling_path) and not force_remake:
         return pd.read_feather(rolling_path)
     else:
-        yhat_path = PROPHET_PATH+CACHE_PATH+VERSION[:-1]+'yhat'+'.f'
+        yhat_path = PROPHET_PATH+CACHE_PATH+VERSION[:-1]+prop+'.f'
         if os.path.isfile(yhat_path) and not force_remake:
             yhat = pd.read_feather(yhat_path)
         else:
