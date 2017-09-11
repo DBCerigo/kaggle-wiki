@@ -15,3 +15,11 @@ def smape_df(df, y_true_label, y_pred_label):
     diff = np.abs(y_true - y_pred) / denominator
     diff[denominator == 0] = 0.0
     return np.nanmean(diff)
+
+def get_smape_df(train, yhat):
+    denominator = (train + yhat) / 200
+    diff = np.abs(train - yhat) / denominator
+    diff[denominator == 0] = 0.0
+    #return np.nanmean(diff, axis=0)
+    #diff.mean(axis=1, skipna=True)
+    return diff
