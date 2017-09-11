@@ -35,6 +35,8 @@ def get_yhat_rolling_smape(train, yhat):
     yhat_rolling_smape = yhat_smape.rolling(60,
                     axis=1, min_periods=0).mean().iloc[:,60:].round(5)
     yhat_rolling_smape = yhat_rolling_smape.shift(-59, axis=1)
+    assert yhat_rolling_smape.max().max() <= 200
+    assert yhat_rolling_smape.min().min() >= 0
     print('(df.smape_60_to_0.fillna(-1) == median_rolling_smape.iloc[:,-60].fillna(-1)).sum() -> 145063')
     return yhat_rolling_smape
 
