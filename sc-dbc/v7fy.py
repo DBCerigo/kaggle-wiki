@@ -49,7 +49,7 @@ lg.info('Finished loading base pagedf and ds')
 VERSION = 'v7fy/'
 assert VERSION[-1] == '/'
 upper_lim = None # data beyond here considered future
-val_lims = utils.prevYear_shift((0+13,62+13))
+val_lims = utils.prevYear_shift((74-62,74))
 os.makedirs(PROPHET_PATH+VERSION)
 
 # # WARNING:

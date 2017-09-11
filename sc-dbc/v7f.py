@@ -26,11 +26,12 @@ from tqdm import tqdm
 
 #* TRAINING
 #    * Train indexing on None
-#    * Val indexing on None to None (end/None)
+#    * Val indexing removed
 #    * Now with try:except:except: for the `RuntimeError': k initialized to invalid value (-nan)` which replaces first `y` with 0.001...
 #       * ...and for the `TypeError` which replaces first 10 `y` with 0 then first y with 0.001
 #    
 #* PREDICTIONS
+#    * Predict 74 days in future
 #    * Truncating predictions at 0 
 #    * Rounding to nearest int
 
@@ -46,11 +47,10 @@ ds = pd.read_feather(PROPHET_PATH+'ds.f')
 lg.info('Finished loading base pagedf and ds')
 
 # should break if the dir already exists - avoids accidental overwriting
-VERSION = 'v7t/'
+VERSION = 'v7f/'
 assert VERSION[-1] == '/'
-train_lims = (0,-60)
-val_lim = None
-#os.makedirs(PROPHET_PATH+VERSION)
+days_to_predict = 74
+os.makedirs(PROPHET_PATH+VERSION)
 
 # # WARNING:
 # Turned off the chained assignment warning - when slicing dfs they can return copies sometimes instead,
@@ -72,7 +72,7 @@ def process_page(page):
         df.columns = ['ds','y']
         df['y_org'] = df.y
         # should also consider doing validation on the time period we are forecasting
-        traindf = df.iloc[train_lims[0]:train_lims[1]]
+        traindf = df
         traindf['train'] = 1 # feather won't serialize bool so 1s and 0s...
         try:
             m = Prophet(yearly_seasonality=True)
@@ -88,11 +88,11 @@ def process_page(page):
             traindf.loc[0,'y'] = 0.001
             m = Prophet(yearly_seasonality=True)
             m.fit(traindf)
-        forecast = m.predict(ds.iloc[:val_lim])
+        ds = m.make_future_dataframe(periods=days_to_predict)
+        forecast = m.predict(ds)
         forecast['yhat_org'] = forecast['yhat']
         forecast.loc[forecast['yhat'] < 0,['yhat']] = 0.0
         forecast.loc[:,'yhat'] = forecast.yhat.round(0).astype(int)
-        df = df.iloc[:val_lim]
         forecast = forecast.join(df.y)
         forecast = forecast.join(df.y_org)
         forecast = forecast.join(traindf.loc[:,['train']]).fillna({'train':0}) # 0 bools
