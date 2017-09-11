@@ -50,7 +50,7 @@ lg.info('Finished loading base pagedf and ds')
 VERSION = 'v7f/'
 assert VERSION[-1] == '/'
 days_to_predict = 74
-os.makedirs(PROPHET_PATH+VERSION)
+#os.makedirs(PROPHET_PATH+VERSION)
 
 # # WARNING:
 # Turned off the chained assignment warning - when slicing dfs they can return copies sometimes instead,
@@ -88,8 +88,8 @@ def process_page(page):
             traindf.loc[0,'y'] = 0.001
             m = Prophet(yearly_seasonality=True)
             m.fit(traindf)
-        ds = m.make_future_dataframe(periods=days_to_predict)
-        forecast = m.predict(ds)
+        ds_future = m.make_future_dataframe(periods=days_to_predict)
+        forecast = m.predict(ds_future)
         forecast['yhat_org'] = forecast['yhat']
         forecast.loc[forecast['yhat'] < 0,['yhat']] = 0.0
         forecast.loc[:,'yhat'] = forecast.yhat.round(0).astype(int)
