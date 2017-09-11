@@ -49,8 +49,8 @@ def load_prophet_rolling_smape(VERSION, prop='yhat', force_remake=False, test=No
     assert VERSION[-1] == '/'
     rolling_path = PROPHET_PATH+CACHE_PATH+VERSION[:-1]+'rolling_'+prop+'.f'
     if os.path.isfile(rolling_path) and not force_remake:
-	    print('prophet_rolling_smape indexing ::: index -> smape for that following (non_inclusive) 60 days period')
-	    print('(df.v7t_val.round(decimals=6).fillna(-10) == yhat_rolling_smape.iloc[:,-60].round(decimals=6).fillna(-10)).sum() -> 145063')
+        print('prophet_rolling_smape indexing ::: index -> smape for that following (non_inclusive) 60 days period')
+        print('(df.v7t_val.round(decimals=6).fillna(-10) == yhat_rolling_smape.iloc[:,-60].round(decimals=6).fillna(-10)).sum() -> 145063')
         return pd.read_feather(rolling_path)
     else:
         yhat_path = PROPHET_PATH+CACHE_PATH+VERSION[:-1]+prop+'.f'
