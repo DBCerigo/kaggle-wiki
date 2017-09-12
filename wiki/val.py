@@ -84,19 +84,43 @@ def load_prophet_rolling_smape(VERSION, prop='yhat', force_remake=False, test=No
         return rolling_smape_df
     
 
-def load_median_rolling_smape():
+def load_median_rolling_smape(FINAL=True,force_remake=False):
+    df_path = '../data/median_rolling_smape.f'
+    if FINAL:
+        df_path = '../data/median_rolling_smapef.f'
     print('median_rolling_smape indexing ::: index -> smape for that following (non_inclusive) 60 days period')
     print('(df.smape_60_to_0.fillna(-1) == median_rolling_smape.iloc[:,-60].fillna(-1)).sum() -> 145063')
-    return pd.read_feather('../data/median_rolling_smape.f')
+    if os.path.isfile(df_path) and not force_remake:
+        return pd.read_feather(df_path)
+    med_rolling = load_median_rolling(FINAL=FINAL)
+    train = pd.read_feather('../data/train.f')
+    median_rolling_smape = train.copy()
+    median_rolling_smape.iloc[:,0] = np.nan
+    for start_index in tqdm(range(1,train.shape[1])):
+        median_rolling_smape.iloc[:,start_index] = _median_smape_periodStart(train,
+                                                                            med_rolling.iloc[:,start_index-1],
+                                                                            start_index)
+    median_rolling_smape = median_rolling_smape.round(decimals=8)
+    assert median_rolling_smape.max().max() <= 200
+    assert median_rolling_smape.min().min() >= 0
+    assert median_rolling_smape.shape == (145063, 803)
+    median_rolling_smape.to_feather(df_path)
+    print('TEST VERSION so can"t see data train.iloc[:,-60:]')
+    print('median_rolling_smape indexing ::: index -> smape for that following (non_inclusive) 60 days period')
+    print('(df.smape_60_to_0.fillna(-1) == median_rolling_smape.iloc[:,-60].fillna(-1)).sum() -> 145063')
+    return median_rolling_smape
 
-def load_median_rolling(force_remake=False):
+def load_median_rolling(FINAL=True,force_remake=False):
     df_path = '../data/median_rolling.f'
+    if FINAL:
+        df_path = '../data/median_rollingf.f'
     if os.path.isfile(df_path) and not force_remake:
         return pd.read_feather(df_path)
     else:
         train = pd.read_feather('../data/train.f')
         med_rolling = train.rolling(49, axis=1, min_periods=0).median()
         med_rolling = med_rolling.round().fillna(0).astype(int)
+        assert med_rolling.shape == (145063, 803)
         med_rolling.to_feather(df_path)
         return med_rolling
 
