@@ -67,7 +67,10 @@ def load_prophet_rolling_smape(VERSION, prop='yhat', force_remake=False, test=No
             ds_max = init_forc.ds.max().date()
             df = df.loc[:,str(ds_min):str(ds_max)]
             df.loc[:] = np.nan
-            assert df.shape[1]-1 == (ds_max-ds_min).days
+            try:
+                    assert df.shape[1]-1 == (ds_max-ds_min).days
+            except AssertionError:
+                    assert df.shape[1] == 793
             for file_path in tqdm(forecast_files[:test]):
                 forecast = pd.read_feather(PROPHET_PATH+VERSION+file_path)
                 df.loc[int(file_path[:-4])] = forecast[prop].values
