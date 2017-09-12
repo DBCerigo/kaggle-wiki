@@ -110,7 +110,8 @@ class RNN(nn.Module):
                 np.array(target values)
         """
         all_output = []
-        for batch in valloader:
+        for batch in dataloader:
+            pred_len = batch[3].size()[1]
             output = self._predict_batch(batch, pred_len)
             all_output.append(output)
         return torch.cat(all_output, dim=0)
