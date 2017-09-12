@@ -3,6 +3,7 @@ import os
 import pandas as pd
 import numpy as np
 import glob
+from tqdm import tqdm
 
 def load_prophet_prop(VERSION, prop, force_remake=False, test=None):
     PROPHET_PATH = '../data/prophet/'

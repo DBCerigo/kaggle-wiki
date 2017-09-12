@@ -2,7 +2,7 @@ import os
 import numpy as np
 import pandas as pd
 import glob
-import tqdm
+from tqdm import tqdm
 
 def smape(y_true, y_pred, axis=None):
     # NOTE: should check and make sure that NaNs aren't included
@@ -78,6 +78,7 @@ def load_prophet_rolling_smape(VERSION, prop='yhat', force_remake=False, test=No
         train = pd.read_feather('../data/train.f')
         if test_version:
             train.iloc[:,-60:] = np.nan
+            print('TEST VERSION so can"t see data train.iloc[:,-60:]')
         rolling_smape_df = get_yhat_rolling_smape(train, yhat)
         rolling_smape_df.to_feather(rolling_path)
         return rolling_smape_df
@@ -113,15 +114,14 @@ def load_test_median_rolling_smape(force_remake=False):
     median_rolling_smape = train.copy()
     median_rolling_smape.iloc[:,0] = np.nan
     for start_index in tqdm(range(1,train.shape[1])):
-        print(start_index, end=', ');
-        median_rolling_smape.iloc[:,start_index] = median_smape_periodStart(train,
+        median_rolling_smape.iloc[:,start_index] = _median_smape_periodStart(train,
                                                                             med_rolling.iloc[:,start_index-1],
                                                                             start_index)
     median_rolling_smape = median_rolling_smape.round(decimals=8)
     assert median_rolling_smape.max().max() <= 200
     assert median_rolling_smape.min().min() >= 0
     median_rolling_smape.to_feather(df_path)
-    print('TEST VERSION so can"t see data iloc.[:,-60:]')
+    print('TEST VERSION so can"t see data train.iloc[:,-60:]')
     print('median_rolling_smape indexing ::: index -> smape for that following (non_inclusive) 60 days period')
     print('(df.smape_60_to_0.fillna(-1) == median_rolling_smape.iloc[:,-60].fillna(-1)).sum() -> 145063')
     return median_rolling_smape

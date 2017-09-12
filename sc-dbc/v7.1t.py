@@ -51,7 +51,7 @@ VERSION = 'v7.1t/'
 assert VERSION[-1] == '/'
 train_lims = (0,-60)
 val_lim = None
-os.makedirs(PROPHET_PATH+VERSION)
+#os.makedirs(PROPHET_PATH+VERSION)
 
 # # WARNING:
 # Turned off the chained assignment warning - when slicing dfs they can return copies sometimes instead,
@@ -60,6 +60,7 @@ os.makedirs(PROPHET_PATH+VERSION)
 pd.options.mode.chained_assignment = None
 
 def process_page(page):
+    page = str(page)
     base_log_info = '[Process:{0}, on page:{1}] '.format(mp.current_process().name, page)
     lg.info(base_log_info)
     df_path = PROPHET_PATH+VERSION+page+'df.f'
@@ -70,6 +71,7 @@ def process_page(page):
     else:
         lg.info(base_log_info +'COMPUTE loop')
         df = ds.join(pagedf[page])
+        #lg.info(df.head())
         df.columns = ['ds','y']
         df['y_org'] = df.y
         # should also consider doing validation on the time period we are forecasting
@@ -91,8 +93,9 @@ def process_page(page):
             traindf.loc[0,'y'] = 0.001
             m = Prophet(yearly_seasonality=True, growth='logistic')
             m.fit(traindf)
-        ds['cap'] = max_y
-        forecast = m.predict(ds.iloc[:val_lim])
+        ds_t = ds.copy()
+        ds_t['cap'] = max_y
+        forecast = m.predict(ds_t.iloc[:val_lim])
         forecast['yhat_org'] = forecast['yhat']
         forecast.loc[forecast['yhat'] < 0,['yhat']] = 0.0
         forecast.loc[:,'yhat'] = forecast.yhat.round(0).astype(int)
@@ -123,8 +126,9 @@ def wrapper(pages):
 total_proc = mp.cpu_count()
 # NOTE: shuffle the cols to that any pages that still need models built get distributied evenly
 # NOTE: shuffling the index directly switches all the pages from their corresponding series... BAD
-pages_index_df = pd.read_feather(PROPHET_PATH+CACHE_PATH+'yhat_org_mean_LESS_0.f')
-cols = pages_index_df.page_index.values.copy()
+#pages_index_df = pd.read_feather(PROPHET_PATH+CACHE_PATH+'yhat_org_mean_LESS_0.f')
+#cols = pages_index_df.page_index.values.copy()
+cols = pagedf.columns.values.copy()
 np.random.shuffle(cols)
 col_split = np.array_split(cols, total_proc)
 mp_pool = mp.Pool(total_proc)
