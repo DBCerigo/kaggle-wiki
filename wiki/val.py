@@ -88,6 +88,18 @@ def load_median_rolling_smape():
     print('(df.smape_60_to_0.fillna(-1) == median_rolling_smape.iloc[:,-60].fillna(-1)).sum() -> 145063')
     return pd.read_feather('../data/median_rolling_smape.f')
 
+def load_median_rolling(force_remake=False):
+    df_path = '../data/median_rolling.f'
+    if os.path.isfile(df_path) and not force_remake:
+        return pd.read_feather(df_path)
+    else:
+        train = pd.read_feather('../data/train.f')
+        med_rolling = train.rolling(49, axis=1, min_periods=0).median()
+        med_rolling = med_rolling.round().fillna(0).astype(int)
+        med_rolling.to_feather(df_path)
+        return med_rolling
+
+
 def load_test_median_rolling_smape(force_remake=False):
     df_path = '../data/median_test_rolling_smape.f'
     print('median_rolling_smape indexing ::: index -> smape for that following (non_inclusive) 60 days period')
