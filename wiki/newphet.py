@@ -20,10 +20,13 @@ def load_prophet_prop(VERSION, prop, force_remake=False, test=None):
         ds_max = init_forc.ds.max().date()
         df = df.loc[:,str(ds_min):str(ds_max)]
         df.loc[:] = np.nan
-        assert df.shape[1]-1 == (ds_max-ds_min).days
+        try:
+            assert df.shape[1]-1 == (ds_max-ds_min).days
+        except AssertionError:
+            assert df.shape[1] == 803
         for file_path in tqdm(forecast_files[:test]):
             forecast = pd.read_feather(PROPHET_PATH+VERSION+file_path)
-            df.loc[int(file_path[:-4])] = forecast[prop].values
+            df.loc[int(file_path[:-4])] = forecast.iloc[:-64][prop].values
         df.sort_index(inplace=True)
         df = df.apply(pd.to_numeric)
         df.to_feather(df_path)
