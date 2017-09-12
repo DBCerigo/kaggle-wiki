@@ -74,20 +74,23 @@ def process_page(page):
         # should also consider doing validation on the time period we are forecasting
         traindf = df.iloc[train_lims[0]:train_lims[1]]
         traindf['train'] = 1 # feather won't serialize bool so 1s and 0s...
+        max_y = traindf.y.max() * 2
+        traindf['cap'] = max_y # feather won't serialize bool so 1s and 0s...
         try:
-            m = Prophet(yearly_seasonality=True)
+            m = Prophet(yearly_seasonality=True, growth='logistic')
             m.fit(traindf)
         except RuntimeError:
             lg.info(base_log_info+'RuntimeError triggered on fit (all 0), replacing first y with 0.001 and retry')
             traindf.loc[0,'y'] = 0.001
-            m = Prophet(yearly_seasonality=True)
+            m = Prophet(yearly_seasonality=True, growth='logistic')
             m.fit(traindf)
         except TypeError:
             lg.info(base_log_info+'TypeError triggered on fit (all NaN), replacing first 10 y with 0 and first y with 0.001 and retry')
             traindf.loc[:10,'y'] = 0
             traindf.loc[0,'y'] = 0.001
-            m = Prophet(yearly_seasonality=True)
+            m = Prophet(yearly_seasonality=True, growth='logistic')
             m.fit(traindf)
+        ds['cap'] = max_y
         forecast = m.predict(ds.iloc[:val_lim])
         forecast['yhat_org'] = forecast['yhat']
         forecast.loc[forecast['yhat'] < 0,['yhat']] = 0.0
