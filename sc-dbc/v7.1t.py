@@ -39,6 +39,7 @@ from tqdm import tqdm
 
 PROPHET_PATH = '../data/prophet/'
 RESULTS_PATH = 'results/'
+CACHE_PATH = 'cache/'
 
 lg.info('Loading base pagedf and ds')
 pagedf = pd.read_feather(PROPHET_PATH+'pagedf.f')
@@ -46,11 +47,11 @@ ds = pd.read_feather(PROPHET_PATH+'ds.f')
 lg.info('Finished loading base pagedf and ds')
 
 # should break if the dir already exists - avoids accidental overwriting
-VERSION = 'v7t/'
+VERSION = 'v7.1t/'
 assert VERSION[-1] == '/'
 train_lims = (0,-60)
 val_lim = None
-#os.makedirs(PROPHET_PATH+VERSION)
+os.makedirs(PROPHET_PATH+VERSION)
 
 # # WARNING:
 # Turned off the chained assignment warning - when slicing dfs they can return copies sometimes instead,
@@ -122,7 +123,8 @@ def wrapper(pages):
 total_proc = mp.cpu_count()
 # NOTE: shuffle the cols to that any pages that still need models built get distributied evenly
 # NOTE: shuffling the index directly switches all the pages from their corresponding series... BAD
-cols = pagedf.columns.values.copy()
+pages_index_df = pd.read_feather(PROPHET_PATH+CACHE_PATH+'yhat_org_mean_LESS_0.f')
+cols = pages_index_df.page_index.values.copy()
 np.random.shuffle(cols)
 col_split = np.array_split(cols, total_proc)
 mp_pool = mp.Pool(total_proc)
